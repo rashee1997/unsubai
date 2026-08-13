@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { senders } = await req.json();
+    const { senders, customInstructions } = await req.json();
 
     if (!Array.isArray(senders) || senders.length === 0) {
       return NextResponse.json({ sendersAnalysis: [] });
@@ -28,8 +28,12 @@ export async function POST(req: NextRequest) {
       snippet: s.sampleSnippet,
     }));
 
-    const prompt = `Analyze these recurring subscription senders found in a user's Gmail inbox. The user wants to unsubscribe from newsletters, marketing promos, and low-engagement emails they haven't opened in a long time.
+    const userCustomSection = customInstructions && typeof customInstructions === 'string' && customInstructions.trim().length > 0
+      ? `\n\n=== USER CUSTOM FILTERING INSTRUCTIONS & OVERRIDES (STRICTLY ENFORCE) ===\n${customInstructions.trim()}\n===================================================================\n`
+      : '';
 
+    const prompt = `Analyze these recurring subscription senders found in a user's Gmail inbox. The user wants to unsubscribe from newsletters, marketing promos, and low-engagement emails they haven't opened in a long time.
+${userCustomSection}
 CRITICAL FEATURE - JOB ALERTS FILTERING:
 If a sender is sending job alerts, recruitment notifications, hiring recommendations, interview invites, career updates, or job board matches (e.g. LinkedIn Jobs, Indeed, Glassdoor, ZipRecruiter, Greenhouse, Lever, Workday, Google Careers, Handshake, Hired, Wellfound/AngelList, Dice, company hiring alerts, or job opportunity digests):
 - Set "isJobRelated": true

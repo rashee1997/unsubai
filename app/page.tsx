@@ -5,11 +5,14 @@ import { Navbar } from '@/components/Navbar';
 import { ScanFilterPanel, ScanConfig } from '@/components/ScanFilterPanel';
 import { InboxHealthDashboard } from '@/components/InboxHealthDashboard';
 import { SenderCard, GroupedSenderData, AIAnalysisData } from '@/components/SenderCard';
+import { EmailPreviewModal } from '@/components/EmailPreviewModal';
 import { AuditLogModal, AuditLogEntry } from '@/components/AuditLogModal';
 import { UnsubscribeConfirmModal } from '@/components/UnsubscribeConfirmModal';
 import { BulkTrashConfirmModal } from '@/components/BulkTrashConfirmModal';
 import { ClientIdModal } from '@/components/ClientIdModal';
-import { Sparkles, Search, Filter, ShieldAlert, CheckCircle2, History, AlertCircle, RefreshCw, Mail, ArrowRight, Send, CheckSquare, Trash2, Briefcase } from 'lucide-react';
+import { Sparkles, Search, ShieldAlert, CheckCircle2, History, AlertCircle, RefreshCw, Mail, ArrowRight, Send, Trash2, Globe, Tag, X, FilterX, AtSign, Check, SlidersHorizontal } from 'lucide-react';
+import { getStoredSettings, compileCombinedCustomInstructions } from '@/lib/settings';
+import { filterSendersFuzzy } from '@/lib/fuzzySearch';
 
 declare global {
   interface Window {
@@ -157,36 +160,45 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('google_client_id');
-      if (stored && stored.trim() !== '' && stored !== 'MY_GOOGLE_CLIENT_ID') {
-        return stored;
-      }
+      return localStorage.getItem('unsub_ai_client_id') || '';
     }
     return '';
   });
+  const [isClientIdModalOpen, setIsClientIdModalOpen] = useState(false);
 
+  // Scan Configuration State
   const [scanConfig, setScanConfig] = useState<ScanConfig>({
     timeframe: '30d',
     mode: 'unopened',
     maxResults: 60,
   });
 
-  const [isScanning, setIsScanning] = useState(false);
+  // Main Senders State & UI States
   const [senders, setSenders] = useState<GroupedSenderData[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Unsubscribe & Cleanup States
-  const [unsubscribingMap, setUnsubscribingMap] = useState<Record<string, boolean>>({});
+  // Interactive Action Sets & Maps
   const [unsubscribedSet, setUnsubscribedSet] = useState<Set<string>>(new Set());
-  const [cleaningMap, setCleaningMap] = useState<Record<string, boolean>>({});
   const [cleanedSet, setCleanedSet] = useState<Set<string>>(new Set());
+  const [cleanedMessagesTotal, setCleanedMessagesTotal] = useState<number>(0);
+  const [unsubscribingMap, setUnsubscribingMap] = useState<Record<string, boolean>>({});
+  const [cleaningMap, setCleaningMap] = useState<Record<string, boolean>>({});
 
-  const [cleanedMessagesTotal, setCleanedMessagesTotal] = useState(0);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  // Filter & Search Controls
+  const [searchQuery, setSearchQuery] = useState('');
+  const [domainFilter, setDomainFilter] = useState('');
+  const [domainFilterMode, setDomainFilterMode] = useState<'include' | 'exclude'>('include');
+  const [contextTypeFilter, setContextTypeFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low' | 'job_alerts'>('all');
+
+  // Modals & Audit Logs
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
-  // Confirmation Modal State
+  // Safety Confirmation Step State
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [confirmCandidates, setConfirmCandidates] = useState<GroupedSenderData[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
@@ -198,231 +210,179 @@ export default function Home() {
   const [isBulkTrashProcessing, setIsBulkTrashProcessing] = useState(false);
   const [bulkTrashProcessedCount, setBulkTrashProcessedCount] = useState(0);
 
-  // Filter & Search Controls
-  const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low' | 'job_alerts'>('all');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isClientIdModalOpen, setIsClientIdModalOpen] = useState(false);
+  // Email Full Preview Modal State
+  const [previewingSender, setPreviewingSender] = useState<GroupedSenderData | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-  // 1. Fetch Client ID if not already set locally
-  useEffect(() => {
-    fetch('/api/auth/config')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.clientId && data.clientId !== 'MY_GOOGLE_CLIENT_ID') {
-          setClientId((prev) => (prev ? prev : data.clientId));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // 2. Fetch User Profile when token is available
-  const fetchUserProfile = useCallback(async (token: string) => {
-    try {
-      const res = await fetch('/api/gmail/user', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUserEmail(data.emailAddress);
-      }
-    } catch {
-      // fallback
+  // Save updated Client ID
+  const handleSaveClientId = (newId: string) => {
+    setClientId(newId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('unsub_ai_client_id', newId);
     }
-  }, []);
+    setIsClientIdModalOpen(false);
+  };
 
-  // 3. Google OAuth Connect trigger with ID parameter
-  const handleConnectWithId = useCallback(
-    (activeClientId: string) => {
-      setErrorMessage(null);
-
-      if (!window.google?.accounts?.oauth2) {
-        setErrorMessage('Google Identity Services script is loading. Please retry in a moment.');
-        return;
-      }
-
-      try {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: activeClientId,
-          scope:
-            'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send',
-          callback: (response: any) => {
-            if (response.access_token) {
-              setAccessToken(response.access_token);
-              fetchUserProfile(response.access_token);
-              setIsDemoMode(false);
-            } else if (response.error) {
-              setErrorMessage(`Authentication failed: ${response.error}`);
-            }
-          },
-        });
-
-        client.requestAccessToken({ prompt: '' });
-      } catch (err: any) {
-        setErrorMessage(`OAuth initialization error: ${err.message || 'Invalid Client ID'}`);
-        setIsClientIdModalOpen(true);
-      }
-    },
-    [fetchUserProfile]
-  );
-
+  // Google OAuth Popup Initializer
   const handleConnect = useCallback(() => {
-    const activeClientId =
-      clientId ||
-      (typeof window !== 'undefined' ? localStorage.getItem('google_client_id') : null) ||
-      (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID !== 'MY_GOOGLE_CLIENT_ID'
-        ? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        : '');
-
-    if (!activeClientId || activeClientId.trim() === '' || activeClientId === 'MY_GOOGLE_CLIENT_ID') {
+    if (!clientId) {
       setIsClientIdModalOpen(true);
       return;
     }
 
-    handleConnectWithId(activeClientId);
-  }, [clientId, handleConnectWithId]);
-
-  const handleSaveClientId = (newClientId: string) => {
-    setClientId(newClientId);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('google_client_id', newClientId);
+    if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
+      setErrorMessage('Google Identity Services library is loading. Please retry in a moment.');
+      return;
     }
-    setIsClientIdModalOpen(false);
-    setTimeout(() => {
-      handleConnectWithId(newClientId);
-    }, 100);
-  };
 
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope:
+          'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
+        callback: async (response: any) => {
+          if (response.error) {
+            console.error('OAuth token error:', response);
+            setErrorMessage(`Google Login Failed: ${response.error_description || response.error}`);
+            return;
+          }
+
+          if (response.access_token) {
+            setAccessToken(response.access_token);
+            setIsDemoMode(false);
+            setErrorMessage(null);
+
+            // Fetch User Profile
+            try {
+              const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: { Authorization: `Bearer ${response.access_token}` },
+              });
+              if (res.ok) {
+                const info = await res.json();
+                setUserEmail(info.email || 'Connected User');
+              }
+            } catch (e) {
+              setUserEmail('Connected User');
+            }
+          }
+        },
+      });
+
+      client.requestAccessToken();
+    } catch (err: any) {
+      console.error('Failed to init Google Token Client:', err);
+      setErrorMessage(`OAuth Client Error: ${err.message || 'Check Client ID configuration.'}`);
+    }
+  }, [clientId]);
+
+  // Handle Disconnect
   const handleDisconnect = () => {
     setAccessToken(null);
     setUserEmail(null);
     setSenders([]);
     setHasScanned(false);
+    setIsDemoMode(false);
   };
 
-  // 4. Run Scan & AI Analysis
+  // Trigger Inbox Scan & AI Priority Scoring
   const runScan = async () => {
+    setIsScanning(true);
     setErrorMessage(null);
 
-    // If not connected, load sample demo dataset
+    // If no access token, run demo mode with high quality sample data
     if (!accessToken) {
-      setIsScanning(true);
       setTimeout(() => {
         setSenders(SAMPLE_SENDERS);
         setHasScanned(true);
-        setIsDemoMode(true);
         setIsScanning(false);
-      }, 1000);
+        setIsDemoMode(true);
+      }, 1200);
       return;
     }
 
-    setIsScanning(true);
     try {
-      // Step A: Scan Gmail REST API
-      const scanRes = await fetch('/api/gmail/scan', {
+      // Get stored custom filter rules & direct instructions
+      const userSettings = getStoredSettings();
+      const combinedCustomInstructions = compileCombinedCustomInstructions(userSettings);
+
+      const res = await fetch('/api/gmail/scan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(scanConfig),
+        body: JSON.stringify({
+          timeframe: scanConfig.timeframe,
+          mode: scanConfig.mode,
+          maxResults: scanConfig.maxResults,
+          customQuery: scanConfig.customQuery,
+          customInstructions: combinedCustomInstructions,
+        }),
       });
 
-      if (!scanRes.ok) {
-        const errJson = await scanRes.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to scan Gmail inbox.');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Scan failed with status ${res.status}`);
       }
 
-      const scanData = await scanRes.json();
-      const fetchedSenders: GroupedSenderData[] = scanData.senders || [];
-
-      if (fetchedSenders.length === 0) {
-        setSenders([]);
-        setHasScanned(true);
-        setIsScanning(false);
-        return;
-      }
-
-      // Step B: Send to Gemini AI for analysis
-      const aiRes = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ senders: fetchedSenders }),
-      });
-
-      let aiAnalysisMap: Record<string, AIAnalysisData> = {};
-      if (aiRes.ok) {
-        const aiData = await aiRes.json();
-        const list: AIAnalysisData[] = aiData.sendersAnalysis || [];
-        for (const item of list) {
-          aiAnalysisMap[item.senderKey.toLowerCase()] = item;
-        }
-      }
-
-      // Step C: Merge AI analysis with sender data
-      const mergedSenders = fetchedSenders.map((s) => ({
-        ...s,
-        analysis: aiAnalysisMap[s.senderKey.toLowerCase()] || {
-          senderKey: s.senderKey,
-          unsubscribePriority: (s.unreadCount >= 2 ? 'high' : 'medium') as any,
-          recommendationScore: Math.min(60 + s.unreadCount * 8, 98),
-          category: 'Newsletter',
-          summary: `Has ${s.unreadCount} unread email(s) in this scan period.`,
-          isSensitive: false,
-        },
-      }));
-
-      // Sort by AI recommendation score descending
-      mergedSenders.sort((a, b) => (b.analysis?.recommendationScore || 0) - (a.analysis?.recommendationScore || 0));
-
-      setSenders(mergedSenders);
+      const data = await res.json();
+      setSenders(data.senders || []);
       setHasScanned(true);
       setIsDemoMode(false);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error executing inbox scan.');
+      console.error('Error scanning Gmail:', err);
+      setErrorMessage(
+        err.message || 'Failed to scan inbox. Ensure permissions are granted or try Demo Mode.'
+      );
+
+      // Fallback to demo mode so user experiences full app features
+      if (senders.length === 0) {
+        setSenders(SAMPLE_SENDERS);
+        setHasScanned(true);
+        setIsDemoMode(true);
+      }
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Open Confirmation Modal for Single Sender
+  // Open Safety Confirmation Step Modal for a Single Sender
   const openConfirmModalForSender = (sender: GroupedSenderData) => {
     setConfirmCandidates([sender]);
     setConfirmModalOpen(true);
   };
 
-  // Open Confirmation Modal for Batch High Priority or Filtered List
-  const openConfirmModalForBatch = (batchList: GroupedSenderData[]) => {
-    const unSubscribedFilter = batchList.filter((s) => !unsubscribedSet.has(s.senderKey));
-    if (unSubscribedFilter.length === 0) return;
-    setConfirmCandidates(unSubscribedFilter);
+  // Open Safety Confirmation Step Modal for Batch/Group
+  const openConfirmModalForBatch = (batch: GroupedSenderData[]) => {
+    const activeCandidates = batch.filter((s) => !unsubscribedSet.has(s.senderKey));
+    if (activeCandidates.length === 0) return;
+    setConfirmCandidates(activeCandidates);
     setConfirmModalOpen(true);
   };
 
-  // Open Bulk Trash Modal for High Priority Senders
+  // Open Bulk Trash Confirmation Modal for High Priority List
   const openBulkTrashModalForHighPriority = () => {
     const highPriorityList = senders.filter((s) => s.analysis?.unsubscribePriority === 'high');
-    const uncleanedList = highPriorityList.filter((s) => !cleanedSet.has(s.senderKey));
-    const targetCandidates = uncleanedList.length > 0 ? uncleanedList : highPriorityList;
-    if (targetCandidates.length === 0) return;
-    setBulkTrashCandidates(targetCandidates);
+    const candidatesToTrash = highPriorityList.filter((s) => !cleanedSet.has(s.senderKey));
+    if (candidatesToTrash.length === 0) return;
+    setBulkTrashCandidates(candidatesToTrash);
     setBulkTrashModalOpen(true);
   };
 
-  // Execute Bulk Trash for High Priority Senders
-  const handleExecuteBulkTrashHighPriority = async (selectedSenders: GroupedSenderData[]) => {
+  // Execute Confirmed Bulk Trash Operation
+  const handleExecuteBulkTrashHighPriority = async (candidates: GroupedSenderData[]) => {
     setIsBulkTrashProcessing(true);
     setBulkTrashProcessedCount(0);
 
-    for (let i = 0; i < selectedSenders.length; i++) {
-      const sender = selectedSenders[i];
+    for (let i = 0; i < candidates.length; i++) {
+      const sender = candidates[i];
       const key = sender.senderKey;
 
       setCleaningMap((prev) => ({ ...prev, [key]: true }));
 
       try {
         if (isDemoMode || !accessToken) {
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 300));
           setCleanedSet((prev) => new Set(prev).add(key));
           setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
 
@@ -432,47 +392,45 @@ export default function Home() {
               senderName: sender.fromName,
               senderEmail: sender.fromEmail,
               action: 'trash',
-              methodUsed: 'Bulk High Priority Trash',
+              methodUsed: 'Bulk High Priority Trash (Demo)',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               messagesAffected: sender.totalEmails,
             },
             ...prev,
           ]);
         } else {
-          if (sender.messageIds.length > 0) {
-            const res = await fetch('/api/gmail/cleanup', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                action: 'trash',
-                messageIds: sender.messageIds,
-              }),
-            });
-
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              console.error(`Failed to bulk trash messages for ${key}:`, err);
-            }
-          }
-
-          setCleanedSet((prev) => new Set(prev).add(key));
-          setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
-
-          setAuditLogs((prev) => [
-            {
-              id: `${Date.now()}-trash-${i}`,
-              senderName: sender.fromName,
-              senderEmail: sender.fromEmail,
-              action: 'trash',
-              methodUsed: 'Bulk High Priority Trash',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              messagesAffected: sender.totalEmails,
+          const res = await fetch('/api/gmail/cleanup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
-            ...prev,
-          ]);
+            body: JSON.stringify({
+              action: 'trash',
+              messageIds: sender.messageIds,
+            }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error(`Failed to bulk trash messages for ${key}:`, err);
+          } else {
+            setCleanedSet((prev) => new Set(prev).add(key));
+            setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+
+            setAuditLogs((prev) => [
+              {
+                id: `${Date.now()}-trash-${i}`,
+                senderName: sender.fromName,
+                senderEmail: sender.fromEmail,
+                action: 'trash',
+                methodUsed: 'Bulk High Priority Trash',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                messagesAffected: sender.totalEmails,
+              },
+              ...prev,
+            ]);
+          }
         }
       } catch (err: any) {
         console.error('Error during bulk trash operation:', err);
@@ -516,14 +474,13 @@ export default function Home() {
               senderName: sender.fromName,
               senderEmail: sender.fromEmail,
               action: 'unsubscribe',
-              methodUsed: sender.unsubscribePostHeader ? 'RFC 8058 One-Click' : 'Mailto Automation',
+              methodUsed: sender.unsubscribePostHeader ? 'One-Click Post' : 'Direct Link / Mailto',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              messagesAffected: sender.totalEmails,
+              messagesAffected: autoTrashEmails ? sender.totalEmails : 0,
             },
             ...prev,
           ]);
         } else {
-          // Call Gmail Unsubscribe Endpoint
           const res = await fetch('/api/gmail/unsubscribe', {
             method: 'POST',
             headers: {
@@ -531,7 +488,7 @@ export default function Home() {
               Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
-              senderKey: sender.senderKey,
+              senderEmail: sender.fromEmail,
               unsubscribeUrl: sender.unsubscribeUrl,
               unsubscribeMailto: sender.unsubscribeMailto,
               unsubscribePostHeader: sender.unsubscribePostHeader,
@@ -539,13 +496,10 @@ export default function Home() {
           });
 
           const data = await res.json();
-          if (data.redirectUrl && data.method === 'web_redirect') {
-            window.open(data.redirectUrl, '_blank');
-          }
+          if (!res.ok) throw new Error(data.error || 'Unsubscribe failed');
 
           setUnsubscribedSet((prev) => new Set(prev).add(key));
 
-          // Optionally trash messages if user opted-in on confirmation modal
           if (autoTrashEmails && sender.messageIds.length > 0) {
             await fetch('/api/gmail/cleanup', {
               method: 'POST',
@@ -557,7 +511,7 @@ export default function Home() {
                 action: 'trash',
                 messageIds: sender.messageIds,
               }),
-            }).catch(() => {});
+            });
             setCleanedSet((prev) => new Set(prev).add(key));
             setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
           }
@@ -568,9 +522,9 @@ export default function Home() {
               senderName: sender.fromName,
               senderEmail: sender.fromEmail,
               action: 'unsubscribe',
-              methodUsed: data.method || 'Unsubscribed',
+              methodUsed: data.methodUsed || 'API Triggered',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              messagesAffected: sender.totalEmails,
+              messagesAffected: autoTrashEmails ? sender.totalEmails : 0,
             },
             ...prev,
           ]);
@@ -626,23 +580,19 @@ export default function Home() {
     }
   };
 
-  // Filtering senders
-  const filteredSenders = senders.filter((s) => {
-    const matchesSearch =
-      s.fromName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.fromEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.analysis?.category || '').toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (!matchesSearch) return false;
-
-    if (priorityFilter === 'high') return s.analysis?.unsubscribePriority === 'high';
-    if (priorityFilter === 'medium') return s.analysis?.unsubscribePriority === 'medium';
-    if (priorityFilter === 'low') return s.analysis?.unsubscribePriority === 'low';
-    if (priorityFilter === 'job_alerts') return Boolean(s.analysis?.isJobRelated || s.analysis?.category?.toLowerCase().includes('job'));
-
-    return true;
+  // Filtering senders using fuzzy matching and domain / context use-type criteria
+  const filteredSenders = filterSendersFuzzy(senders, {
+    query: searchQuery,
+    domainFilter,
+    domainFilterMode,
+    contextType: contextTypeFilter,
+    priorityFilter,
   });
+
+  // Extract top domains from active senders for quick domain chip selection
+  const topDomains = Array.from(
+    new Set(senders.map((s) => s.domain).filter(Boolean))
+  ).slice(0, 8);
 
   const highPriorityList = senders.filter((s) => s.analysis?.unsubscribePriority === 'high');
   const highPriorityCount = highPriorityList.length;
@@ -651,7 +601,7 @@ export default function Home() {
   const totalUnreadEmails = senders.reduce((acc, s) => acc + s.unreadCount, 0);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0A0A0B] text-zinc-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0A0A0B] text-slate-900 dark:text-zinc-100 font-sans transition-colors duration-200">
       {/* Navbar */}
       <Navbar
         userEmail={userEmail}
@@ -665,27 +615,27 @@ export default function Home() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Banner if not connected */}
         {!accessToken && (
-          <div className="mb-8 rounded-3xl bg-[#121215] border border-zinc-800 text-white p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="mb-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white p-6 sm:p-8 shadow-xl relative overflow-hidden transition-colors">
+            <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="max-w-2xl relative z-10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-semibold border border-indigo-500/20 mb-4">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold border border-indigo-200 dark:border-indigo-500/20 mb-4">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 <span>Smart Gmail Unsubscriber with Safety Confirmation</span>
               </div>
 
-              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
                 Review unopened emails & explicitly confirm unsubscriptions.
               </h1>
 
-              <p className="text-zinc-400 text-sm sm:text-base mt-3 leading-relaxed">
+              <p className="text-slate-600 dark:text-zinc-400 text-sm sm:text-base mt-3 leading-relaxed">
                 Connect your Gmail account to let Gemini AI identify newsletter subscriptions, calculate priority scores, and present a clear confirmation step before unsubscribing.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
                   onClick={handleConnect}
-                  className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition-all flex items-center space-x-2 cursor-pointer"
+                  className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 cursor-pointer active:scale-95"
                 >
                   <Mail className="w-4 h-4" />
                   <span>Connect Gmail & Start Free Scan</span>
@@ -694,7 +644,7 @@ export default function Home() {
 
                 <button
                   onClick={runScan}
-                  className="px-5 py-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 font-semibold text-sm transition-colors border border-zinc-700/80 cursor-pointer"
+                  className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-300 font-semibold text-sm transition-colors border border-slate-200 dark:border-zinc-700/80 cursor-pointer"
                 >
                   Preview Demo Mode
                 </button>
@@ -705,9 +655,9 @@ export default function Home() {
 
         {/* Demo Mode Notice */}
         {isDemoMode && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs sm:text-sm flex items-center justify-between gap-4">
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs sm:text-sm flex items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
                 <strong>Preview Mode Active:</strong> Currently showing sample email subscriptions. Connect your live Gmail account above to scan your actual inbox!
               </span>
@@ -723,25 +673,25 @@ export default function Home() {
 
         {/* Error Banner */}
         {errorMessage && (
-          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-rose-950/50 border border-rose-800/70 text-rose-200 text-xs sm:text-sm space-y-3 shadow-xl">
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/70 text-rose-900 dark:text-rose-200 text-xs sm:text-sm space-y-3 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start space-x-3">
-                <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-bold text-white text-sm">Scan Issue Detected</h4>
-                  <p className="text-rose-200/90 text-xs mt-0.5 leading-relaxed">{errorMessage}</p>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">Scan Issue Detected</h4>
+                  <p className="text-rose-800 dark:text-rose-200/90 text-xs mt-0.5 leading-relaxed">{errorMessage}</p>
                 </div>
               </div>
               <button
                 onClick={() => setErrorMessage(null)}
-                className="text-xs font-semibold text-rose-300 hover:text-white transition-colors shrink-0 cursor-pointer"
+                className="text-xs font-semibold text-rose-700 dark:text-rose-300 hover:text-rose-900 dark:hover:text-white transition-colors shrink-0 cursor-pointer"
               >
                 Dismiss
               </button>
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-2 border-t border-rose-900/60 flex flex-wrap items-center gap-2">
+            <div className="pt-2 border-t border-rose-200 dark:border-rose-900/60 flex flex-wrap items-center gap-2">
               <button
                 onClick={handleConnect}
                 className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-colors flex items-center space-x-1 cursor-pointer"
@@ -752,7 +702,7 @@ export default function Home() {
 
               <button
                 onClick={() => setIsClientIdModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-semibold text-xs transition-colors cursor-pointer"
               >
                 Set OAuth Client ID
               </button>
@@ -764,9 +714,9 @@ export default function Home() {
                   setHasScanned(true);
                   setIsDemoMode(true);
                 }}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white font-semibold text-xs transition-colors flex items-center space-x-1 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center space-x-1 cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-300" />
+                <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
                 <span>Load Demo Data</span>
               </button>
             </div>
@@ -799,79 +749,270 @@ export default function Home() {
           />
         )}
 
-        {/* Results Toolbar & Search Controls */}
+        {/* Results Toolbar & Advanced Domain/Fuzzy Filters */}
         {hasScanned && (
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#121215] p-4 rounded-2xl border border-zinc-800 shadow-lg">
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search sender name or domain..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder-zinc-500 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
+          <div className="mb-6 space-y-4">
+            {/* Top Toolbar Panel */}
+            <div className="glass-panel p-4 sm:p-5 transition-all space-y-4">
+              {/* Row 1: Fuzzy Text Search & Custom Domain Filter Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                {/* Fuzzy Search Input Box */}
+                <div className="md:col-span-6 relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                      <Search className="w-3 h-3 text-indigo-500" />
+                      <span>Fuzzy Search (Name, Email, Snippets, Category)</span>
+                    </label>
+                    {searchQuery && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300">
+                        ✨ Fuzzy Match Active
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Fuzzy match name, subject, category (e.g. 'substk', 'job', 'news')..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="glass-input w-full pl-10 pr-8 py-2 text-xs sm:text-sm"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            {/* Batch Action & Filter Tabs */}
-            <div className="flex items-center space-x-2 overflow-x-auto pb-1 sm:pb-0">
-              {/* Batch Confirm Unsubscribe Button */}
-              {highPriorityCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => openConfirmModalForBatch(highPriorityList)}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Confirm Unsubscribe High Priority ({highPriorityCount})</span>
-                </button>
-              )}
+                {/* Custom Domain Filter Input Box & Mode Toggle */}
+                <div className="md:col-span-6">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                      <AtSign className="w-3 h-3 text-indigo-500" />
+                      <span>Custom Domain Filter</span>
+                    </label>
 
-              {/* Bulk Trash High Priority Button */}
-              {highPriorityCount > 0 && (
-                <button
-                  type="button"
-                  onClick={openBulkTrashModalForHighPriority}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>
-                    Bulk Trash High Priority (
-                    {highPriorityList.reduce((acc, s) => acc + (cleanedSet.has(s.senderKey) ? 0 : s.totalEmails), 0)})
+                    {/* Include / Exclude Mode Toggle */}
+                    <div className="flex items-center space-x-1 bg-slate-200/60 dark:bg-zinc-800/60 p-0.5 rounded-lg text-[10px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setDomainFilterMode('include')}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          domainFilterMode === 'include'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Match Only
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDomainFilterMode('exclude')}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          domainFilterMode === 'exclude'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Exclude Domain
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <Globe className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder={
+                        domainFilterMode === 'include'
+                          ? "Filter domain (e.g. substack.com or @linkedin.com)..."
+                          : "Exclude domain (e.g. gmail.com)..."
+                      }
+                      value={domainFilter}
+                      onChange={(e) => setDomainFilter(e.target.value)}
+                      className={`glass-input w-full pl-10 pr-8 py-2 text-xs sm:text-sm ${
+                        domainFilter
+                          ? domainFilterMode === 'include'
+                            ? 'border-indigo-500/50 dark:border-indigo-400/50 bg-indigo-50/30 dark:bg-indigo-950/20'
+                            : 'border-rose-500/50 dark:border-rose-400/50 bg-rose-50/30 dark:bg-rose-950/20'
+                          : ''
+                      }`}
+                    />
+                    {domainFilter && (
+                      <button
+                        onClick={() => setDomainFilter('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Domain Filter Chips */}
+              {topDomains.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200/60 dark:border-white/5">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-500 flex items-center gap-1 mr-1">
+                    <AtSign className="w-3 h-3" /> Quick Domain Filters:
                   </span>
-                </button>
+                  {topDomains.map((domain) => {
+                    const isSelected = domainFilter.toLowerCase().replace(/^@/, '') === domain.toLowerCase();
+                    return (
+                      <button
+                        key={domain}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setDomainFilter('');
+                          } else {
+                            setDomainFilter(domain);
+                            setDomainFilterMode('include');
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-mono transition-all cursor-pointer flex items-center gap-1 backdrop-blur-md active:scale-95 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                            : 'bg-slate-100 dark:bg-zinc-800/80 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 border border-slate-200/80 dark:border-zinc-700/60'
+                        }`}
+                      >
+                        <span>@{domain}</span>
+                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
 
-              {[
-                { id: 'all', label: `All (${senders.length})` },
-                { id: 'high', label: `High (${highPriorityCount})` },
-                { id: 'job_alerts', label: `💼 Job Alerts (${jobAlertsCount})` },
-                { id: 'medium', label: 'Medium' },
-                { id: 'low', label: 'Low / Keep' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setPriorityFilter(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                    priorityFilter === tab.id
-                      ? 'bg-zinc-800 text-white border border-zinc-700'
-                      : 'bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              {/* Row 2: Context / Use-Type Filters & Priority Filter Tabs */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-2 border-t border-slate-200/80 dark:border-white/10">
+                {/* Context Use-Type Selector Pills */}
+                <div className="space-y-1">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-indigo-500" />
+                    <span>Context & Use-Type Filter</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: 'All Contexts' },
+                      { id: 'job_alerts', label: '💼 Careers & Jobs' },
+                      { id: 'newsletters', label: '📰 Tech Newsletters' },
+                      { id: 'ecommerce', label: '🏷️ Deals & Shop' },
+                      { id: 'finance', label: '🧾 Receipts & Bills' },
+                      { id: 'high_unread', label: '📬 High Unread (>5)' },
+                    ].map((ctx) => (
+                      <button
+                        key={ctx.id}
+                        type="button"
+                        onClick={() => setContextTypeFilter(ctx.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
+                          contextTypeFilter === ctx.id
+                            ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                            : 'bg-white/60 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-white/10'
+                        }`}
+                      >
+                        {ctx.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {auditLogs.length > 0 && (
-                <button
-                  onClick={() => setIsAuditModalOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 text-xs font-semibold hover:bg-emerald-900/60 transition-colors flex items-center space-x-1 cursor-pointer shrink-0"
-                >
-                  <History className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Audit Log ({auditLogs.length})</span>
-                </button>
-              )}
+                {/* Priority Filter Tabs & Actions */}
+                <div className="space-y-1">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                    <SlidersHorizontal className="w-3 h-3 text-indigo-500" />
+                    <span>Priority Level</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'all', label: `All (${senders.length})` },
+                      { id: 'high', label: `🔥 High (${highPriorityCount})` },
+                      { id: 'job_alerts', label: `💼 Job Alerts (${jobAlertsCount})` },
+                      { id: 'medium', label: 'Medium' },
+                      { id: 'low', label: 'Low / Keep' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setPriorityFilter(tab.id as any)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap cursor-pointer active:scale-95 backdrop-blur-md ${
+                          priorityFilter === tab.id
+                            ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                            : 'glass-pill text-slate-700 dark:text-zinc-300 hover:bg-white/80 dark:hover:bg-zinc-800/80'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Action Buttons (Batch Unsubscribe, Bulk Trash, Clear Filters) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/80 dark:border-white/10">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-slate-500 dark:text-zinc-400 font-medium">
+                    Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredSenders.length}</strong> of {senders.length} subscriptions
+                  </span>
+
+                  {/* Clear All Filters Button */}
+                  {(searchQuery || domainFilter || contextTypeFilter !== 'all' || priorityFilter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setDomainFilter('');
+                        setContextTypeFilter('all');
+                        setPriorityFilter('all');
+                      }}
+                      className="px-2.5 py-1 rounded-full bg-slate-200/80 dark:bg-zinc-800/80 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-semibold transition-colors flex items-center space-x-1 cursor-pointer active:scale-95"
+                    >
+                      <FilterX className="w-3.5 h-3.5" />
+                      <span>Reset Filters</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {/* Batch Confirm Unsubscribe Button */}
+                  {highPriorityCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openConfirmModalForBatch(highPriorityList)}
+                      className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white text-xs font-bold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Confirm Unsubscribe High ({highPriorityCount})</span>
+                    </button>
+                  )}
+
+                  {/* Bulk Trash High Priority Button */}
+                  {highPriorityCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={openBulkTrashModalForHighPriority}
+                      className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Bulk Trash High</span>
+                    </button>
+                  )}
+
+                  {auditLogs.length > 0 && (
+                    <button
+                      onClick={() => setIsAuditModalOpen(true)}
+                      className="px-3.5 py-1.5 rounded-full bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 text-xs font-semibold hover:bg-emerald-100/80 dark:hover:bg-emerald-900/60 transition-colors flex items-center space-x-1 cursor-pointer active:scale-95 backdrop-blur-md"
+                    >
+                      <History className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Audit Log ({auditLogs.length})</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -880,10 +1021,10 @@ export default function Home() {
         {hasScanned && (
           <div className="space-y-4">
             {filteredSenders.length === 0 ? (
-              <div className="text-center py-12 bg-[#121215] rounded-2xl border border-zinc-800 p-8 shadow-lg">
-                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                <h3 className="text-lg font-bold text-white">No matching senders found</h3>
-                <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-md mx-auto">
+              <div className="text-center py-12 bg-white dark:bg-[#121215] rounded-2xl border border-slate-200 dark:border-zinc-800 p-8 shadow-xs">
+                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">No matching senders found</h3>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
                   Try adjusting your search query, priority filter, or changing your timeframe threshold to scan deeper into your inbox.
                 </p>
               </div>
@@ -894,6 +1035,10 @@ export default function Home() {
                   sender={sender}
                   onUnsubscribe={(s) => Promise.resolve(openConfirmModalForSender(s))}
                   onCleanup={handleCleanup}
+                  onOpenPreview={(s) => {
+                    setPreviewingSender(s);
+                    setIsPreviewModalOpen(true);
+                  }}
                   isUnsubscribing={Boolean(unsubscribingMap[sender.senderKey])}
                   isCleaning={Boolean(cleaningMap[sender.senderKey])}
                   isUnsubscribed={unsubscribedSet.has(sender.senderKey)}
@@ -906,12 +1051,12 @@ export default function Home() {
 
         {/* Initial Prompt State if not scanned yet */}
         {!hasScanned && !isScanning && (
-          <div className="text-center py-16 bg-[#121215] rounded-3xl border border-zinc-800 p-8 shadow-xl">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-950/80 text-indigo-400 flex items-center justify-center mx-auto mb-4 border border-indigo-800/60 shadow-lg">
+          <div className="text-center py-16 bg-white dark:bg-[#121215] rounded-3xl border border-slate-200 dark:border-zinc-800 p-8 shadow-xs transition-colors">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-4 border border-indigo-200 dark:border-indigo-800/60 shadow-xs">
               <Sparkles className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-white">Ready to clean your inbox safely</h3>
-            <p className="text-sm text-zinc-400 mt-2 max-w-lg mx-auto">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Ready to clean your inbox safely</h3>
+            <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2 max-w-lg mx-auto">
               Select your search criteria above and click <strong>&quot;Scan Inbox for Unopened Emails&quot;</strong> to discover recurring subscriptions and explicitly confirm senders before unsubscribing.
             </p>
           </div>
@@ -955,6 +1100,26 @@ export default function Home() {
         onSaveClientId={handleSaveClientId}
         onUseDemoMode={runScan}
         initialValue={clientId}
+      />
+
+      {/* Full Email Preview Modal */}
+      <EmailPreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => {
+          setIsPreviewModalOpen(false);
+          setPreviewingSender(null);
+        }}
+        sender={previewingSender}
+        accessToken={accessToken}
+        onUnsubscribe={(s) => {
+          setIsPreviewModalOpen(false);
+          return Promise.resolve(openConfirmModalForSender(s));
+        }}
+        onCleanup={(s, action) => handleCleanup(s, action)}
+        isUnsubscribing={previewingSender ? Boolean(unsubscribingMap[previewingSender.senderKey]) : false}
+        isCleaning={previewingSender ? Boolean(cleaningMap[previewingSender.senderKey]) : false}
+        isUnsubscribed={previewingSender ? unsubscribedSet.has(previewingSender.senderKey) : false}
+        isCleaned={previewingSender ? cleanedSet.has(previewingSender.senderKey) : false}
       />
     </div>
   );

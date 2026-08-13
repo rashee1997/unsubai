@@ -112,13 +112,24 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const timeframe = body.timeframe || '30d'; // 7d, 14d, 30d, 60d, 90d, 180d
-    const mode = body.mode || 'unopened'; // 'unopened', 'all_subscriptions', 'untouched_promos'
+    const mode = body.mode || 'unopened'; // 'unopened', 'all_subscriptions', 'untouched_promos', 'custom_query'
     const maxScanResults = Math.min(Number(body.maxResults) || 60, 150);
+    const customQuery = typeof body.customQuery === 'string' ? body.customQuery.trim() : '';
 
     // Build primary Gmail search query
     let queryParts: string[] = [];
 
-    if (mode === 'job_alerts') {
+    if (mode === 'custom_query' && customQuery) {
+      // If user typed e.g. "from:domain.com" or "newsletter" directly
+      if (customQuery.includes('from:') || customQuery.includes('subject:') || customQuery.includes('to:')) {
+        queryParts.push(customQuery);
+      } else {
+        // Automatically wrap clean domain or text in from: query operator
+        const cleanDomain = customQuery.replace(/^@/, '');
+        queryParts.push(`(from:${cleanDomain} OR ${customQuery})`);
+      }
+      queryParts.push(`older_than:${timeframe}`);
+    } else if (mode === 'job_alerts') {
       queryParts.push('("job alert" OR "jobs" OR "careers" OR "hiring" OR "interview" OR "recruiter" OR "linkedin jobs" OR "indeed")');
     } else if (mode === 'unopened') {
       queryParts.push('is:unread');
@@ -132,6 +143,16 @@ export async function POST(req: NextRequest) {
       // all subscriptions
       queryParts.push('(unsubscribe OR "list-unsubscribe" OR category:promotions)');
       queryParts.push(`older_than:${timeframe}`);
+    }
+
+    // If customQuery is provided alongside any other mode, add it as a secondary constraint
+    if (mode !== 'custom_query' && customQuery) {
+      if (customQuery.includes('from:') || customQuery.includes('subject:') || customQuery.includes('to:')) {
+        queryParts.push(`(${customQuery})`);
+      } else {
+        const cleanDomain = customQuery.replace(/^@/, '');
+        queryParts.push(`(from:${cleanDomain} OR ${customQuery})`);
+      }
     }
 
     let searchQuery = queryParts.join(' ');
