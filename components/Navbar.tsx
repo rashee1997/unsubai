@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center space-x-1.5">
                 <span className="font-bold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight shrink-0">Unsub.AI</span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400 hidden lg:block leading-none mt-0.5 truncate">AI Inbox Clean & Protection</p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 hidden lg:block leading-none mt-0.5 truncate">Inbox Cleanup & Protection</p>
             </div>
           </Link>
 
@@ -66,7 +66,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <SlidersHorizontal className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
-              <span>AI Rules & Settings</span>
+              <span>Rules & Preferences</span>
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
             </Link>
           </nav>

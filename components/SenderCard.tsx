@@ -129,14 +129,14 @@ export const SenderCard: React.FC<SenderCardProps> = ({
                 {isHighPriority && !analysis.isJobRelated && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100/90 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800/60 backdrop-blur-md">
                     <ShieldAlert className="w-3 h-3 text-rose-600 dark:text-rose-400" />
-                    High AI Priority
+                    High Priority
                   </span>
                 )}
 
                 {isLowPriority && !analysis.isJobRelated && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100/90 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800/60 backdrop-blur-md">
                     <ShieldCheck className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                    Caution / Low Priority
+                    Low Priority
                   </span>
                 )}
               </div>
@@ -189,7 +189,7 @@ export const SenderCard: React.FC<SenderCardProps> = ({
           <div className="mb-3 p-3 rounded-2xl bg-sky-50/80 dark:bg-sky-950/40 border border-sky-200/80 dark:border-sky-800/60 text-sky-900 dark:text-sky-200 text-xs flex items-start gap-2.5 shadow-xs backdrop-blur-md">
             <Briefcase className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-sky-800 dark:text-sky-300">Job Alert Detected:</span> AI automatically set this sender to low priority so you won&apos;t miss career opportunities or recruiter emails.
+              <span className="font-bold text-sky-800 dark:text-sky-300">Job Alert Detected:</span> Automatically prioritized to ensure career opportunities or recruiter emails are preserved.
             </div>
           </div>
         )}
@@ -262,7 +262,7 @@ export const SenderCard: React.FC<SenderCardProps> = ({
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5" />
-                    <span>Unsubscribe (Confirm Step)</span>
+                    <span>Unsubscribe</span>
                   </>
                 )}
               </button>

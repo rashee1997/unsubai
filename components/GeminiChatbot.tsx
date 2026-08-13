@@ -108,7 +108,7 @@ export function GeminiChatbot({
         {
           id: 'welcome-1',
           role: 'model',
-          content: `👋 Hello! I am your **Gemini AI Inbox Agent**. I can search senders, perform CRUD operations, update rules, and unsubscribe from unwanted emails with **human-in-the-loop safety confirmation**.\n\nHow can I help clean or organize your inbox today?`,
+          content: `👋 Hello! I am your **Smart Assistant**. I can help you search senders, automate unsubscriptions, update rules, and keep your inbox clean with **confirmation before any changes**.\n\nHow can I help organize your inbox today?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -126,7 +126,7 @@ export function GeminiChatbot({
 
       let text = `💡 **Scan complete!** Found ${senders.length} senders.`;
       if (highPriority.length > 0) {
-        text = `🔥 **${highPriority.length} High-Priority newsletters** detected! Click to let me unsubscribe them safely.`;
+        text = `🔥 **${highPriority.length} High-Priority newsletters** detected! Click to review and unsubscribe.`;
       } else if (jobAlerts.length > 0) {
         text = `💼 **${jobAlerts.length} Job Alerts protected**. Need me to update filter rules or clean promos?`;
       }
@@ -142,7 +142,7 @@ export function GeminiChatbot({
     } else if (!hasScanned) {
       const timer = setTimeout(() => {
         if (!hasScanned) {
-          setAutoHelpText('✨ Need help organizing your Gmail inbox? Open AI chat for agentic CRUD operations!');
+          setAutoHelpText('✨ Need help organizing your Gmail inbox? Open the assistant to automate email cleanup!');
           setShowAutoTriggerBanner(true);
         }
       }, 3000);
@@ -565,7 +565,7 @@ export function GeminiChatbot({
 
           <div className="hidden sm:flex flex-col text-left">
             <span className="text-xs font-bold tracking-wide uppercase leading-none">AI Assistant</span>
-            <span className="text-xs text-indigo-200 font-medium opacity-90 mt-1">Inbox CRUD Agent</span>
+            <span className="text-xs text-indigo-200 font-medium opacity-90 mt-1">Inbox Workflows</span>
           </div>
         </button>
       )}
@@ -587,12 +587,12 @@ export function GeminiChatbot({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-xs sm:text-sm tracking-tight text-white truncate">Gemini AI Agent</h3>
+                  <h3 className="font-bold text-xs sm:text-sm tracking-tight text-white truncate">AI Assistant</h3>
                   <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-xs font-mono font-medium border border-indigo-500/30 shrink-0">
-                    3.6 Flash
+                    Active
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-medium truncate">Agentic CRUD • Human-in-the-Loop</p>
+                <p className="text-xs text-slate-400 font-medium truncate">Automated Inbox Workflows</p>
               </div>
             </div>
 
@@ -602,11 +602,11 @@ export function GeminiChatbot({
                 value={systemRole}
                 onChange={(e: any) => setSystemRole(e.target.value)}
                 className="bg-slate-800 text-slate-200 text-xs font-medium px-2 py-1 rounded-lg border border-slate-700 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
-                title="Switch Agent Persona"
+                title="Switch Assistant Mode"
               >
-                <option value="inbox_agent">Inbox AI</option>
-                <option value="privacy_expert">Safety AI</option>
-                <option value="strict_cleaner">Cleaner AI</option>
+                <option value="inbox_agent">Smart Assistant</option>
+                <option value="privacy_expert">Security Specialist</option>
+                <option value="strict_cleaner">Inbox Cleaner</option>
               </select>
 
               {/* Minimize / Expand Toggle */}
@@ -642,28 +642,28 @@ export function GeminiChatbot({
                   onClick={() => handleSendMessage('Unsubscribe from all high priority marketing newsletters')}
                   className="px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-zinc-300 hover:text-indigo-600 text-xs font-medium border border-slate-200 dark:border-zinc-700 shrink-0 transition-all cursor-pointer"
                 >
-                  🔥 Unsubscribe High Priority
+                  Unsubscribe High Priority
                 </button>
 
                 <button
                   onClick={() => handleSendMessage('Show all job alerts and recruitment emails')}
                   className="px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-zinc-300 hover:text-indigo-600 text-xs font-medium border border-slate-200 dark:border-zinc-700 shrink-0 transition-all cursor-pointer"
                 >
-                  💼 View Job Alerts
+                  View Job Alerts
                 </button>
 
                 <button
                   onClick={() => handleSendMessage('How healthy is my inbox? Give me a full summary')}
                   className="px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-zinc-300 hover:text-indigo-600 text-xs font-medium border border-slate-200 dark:border-zinc-700 shrink-0 transition-all cursor-pointer"
                 >
-                  📊 Inbox Health Stats
+                  Inbox Summary
                 </button>
 
                 <button
                   onClick={() => handleSendMessage('Add a rule to protect Substack tech digests')}
                   className="px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-700 dark:text-zinc-300 hover:text-indigo-600 text-xs font-medium border border-slate-200 dark:border-zinc-700 shrink-0 transition-all cursor-pointer"
                 >
-                  ➕ Protect Substack Rule
+                  Add Custom Rule
                 </button>
               </div>
 
@@ -687,7 +687,7 @@ export function GeminiChatbot({
                           <>
                             <Bot className="w-3.5 h-3.5 text-indigo-500" />
                             <span>
-                              Gemini Agent ({systemRole === 'inbox_agent' ? 'Inbox AI' : systemRole === 'privacy_expert' ? 'Safety AI' : 'Cleaner AI'})
+                              Assistant ({systemRole === 'inbox_agent' ? 'Smart Assistant' : systemRole === 'privacy_expert' ? 'Security Specialist' : 'Inbox Cleaner'})
                             </span>
                           </>
                         )}
@@ -707,9 +707,7 @@ export function GeminiChatbot({
                         </div>
                       )}
 
-                      {/* ======================================================= */}
-                      {/* HUMAN-IN-THE-LOOP (HITL) CONFIRMATION CARD INLINE IN CHAT */}
-                      {/* ======================================================= */}
+                      {/* ACTION CONFIRMATION CARD INLINE IN CHAT */}
                       {msg.pendingTool && (
                         <div className="w-full mt-2 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-slate-900 dark:text-zinc-100 shadow-md space-y-2.5">
                           <div className="flex items-center justify-between pb-2 border-b border-amber-200 dark:border-amber-800/60">
@@ -717,10 +715,10 @@ export function GeminiChatbot({
                               <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                               <div>
                                 <h4 className="font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300">
-                                  Human Confirmation Required
+                                  Confirmation Required
                                 </h4>
                                 <span className="text-xs font-mono text-amber-700 dark:text-amber-400">
-                                  Tool: {msg.pendingTool.name}
+                                  Action: {msg.pendingTool.name.replace(/_/g, ' ')}
                                 </span>
                               </div>
                             </div>
@@ -732,7 +730,7 @@ export function GeminiChatbot({
                           {/* Action Details */}
                           <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-800/40 text-xs space-y-1 font-mono">
                             <p className="text-slate-800 dark:text-zinc-200 font-sans font-medium text-xs">
-                              <strong>Action Impact:</strong> {msg.pendingTool.args?.reason || 'Agent initiated state update.'}
+                              <strong>Action Summary:</strong> {msg.pendingTool.args?.reason || 'Proposed workflow update.'}
                             </p>
 
                             {msg.pendingTool.args?.senderKeys && (
@@ -794,7 +792,7 @@ export function GeminiChatbot({
                 {isTyping && (
                   <div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500 text-xs font-medium py-1">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-                    <span>Gemini AI thinking...</span>
+                    <span>Processing...</span>
                   </div>
                 )}
 
@@ -814,7 +812,7 @@ export function GeminiChatbot({
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Ask Gemini to search, unsubscribe, or add rules..."
+                    placeholder="Ask assistant to search, unsubscribe, or update rules..."
                     className="flex-1 bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors"
                   />
                   <button
@@ -827,7 +825,7 @@ export function GeminiChatbot({
                 </form>
                 <div className="mt-1.5 flex items-center justify-between text-xs text-slate-400 dark:text-zinc-500 font-medium">
                   <span>Press Enter to send</span>
-                  <span>Human approval required for actions</span>
+                  <span>Confirmation required before changes</span>
                 </div>
               </div>
             </>

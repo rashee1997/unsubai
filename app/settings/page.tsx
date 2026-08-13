@@ -200,14 +200,14 @@ export default function SettingsPage() {
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
               </Link>
               <span>/</span>
-              <span>AI Settings</span>
+              <span>Rules & Preferences</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
               <SlidersHorizontal className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
-              AI Filter & Scanner Settings
+              Filter Rules & Scanner Settings
             </h1>
             <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">
-              Customize natural language rules for Gemini AI, set safety thresholds, and manage scan defaults.
+              Customize rules, set safety thresholds, and manage scan defaults.
             </p>
           </div>
 
@@ -242,7 +242,7 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Column (2 cols) */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Card 1: Custom AI Prompt Instructions */}
+            {/* Card 1: Custom Prompt Instructions */}
             <section className="glass-panel p-6 space-y-5 transition-all">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
@@ -250,18 +250,18 @@ export default function SettingsPage() {
                     <Bot className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Custom AI Prompt Instructions</h2>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400">Direct Gemini AI on what to keep, flag, or protect</p>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Custom Rules & Instructions</h2>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400">Define custom rules for what to keep, flag, or protect</p>
                   </div>
                 </div>
                 <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/40 backdrop-blur-md">
-                  Gemini 3.5 Flash Prompting
+                  Custom Instructions
                 </span>
               </div>
 
               <div>
                 <label htmlFor="custom-instructions" className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400 mb-2">
-                  Direct Instruction Rules (Plain English)
+                  Instruction Rules
                 </label>
                 <textarea
                   id="custom-instructions"
@@ -275,21 +275,21 @@ export default function SettingsPage() {
                 />
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 flex items-center gap-1">
                   <HelpCircle className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                  These instructions are passed directly to Gemini AI during inbox evaluation.
+                  These instructions are applied during inbox evaluation.
                 </p>
               </div>
             </section>
 
-            {/* Card 2: Preset AI Filter Rules Manager */}
+            {/* Card 2: Preset Filter Rules Manager */}
             <section className="glass-panel p-6 space-y-5 transition-all">
               <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-4">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    AI Filter Protection Modules
+                    Protection Rules
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                    Toggle built-in safety rules to enforce specific inbox handling heuristics.
+                    Toggle built-in rules to enforce specific inbox handling.
                   </p>
                 </div>
 

@@ -734,7 +734,7 @@ export default function Home() {
               </h1>
 
               <p className="text-slate-600 dark:text-zinc-400 text-sm sm:text-base mt-3 leading-relaxed">
-                Connect your Gmail account to let Gemini AI identify newsletter subscriptions, calculate priority scores, and present a clear confirmation step before unsubscribing.
+                Connect your Gmail account to automatically categorize newsletter subscriptions, score priority levels, and review unsubscriptions with confidence.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -1162,7 +1162,7 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white">Ready to clean your inbox safely</h3>
             <p className="text-sm text-slate-600 dark:text-zinc-400 mt-2 max-w-lg mx-auto">
-              Select your search criteria above and click <strong>&quot;Scan Inbox for Unopened Emails&quot;</strong> to discover recurring subscriptions and explicitly confirm senders before unsubscribing.
+              Select your search criteria above and click <strong>&quot;Scan Inbox&quot;</strong> to discover recurring subscriptions and review senders before unsubscribing.
             </p>
           </div>
         )}

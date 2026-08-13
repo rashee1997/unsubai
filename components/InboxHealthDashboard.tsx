@@ -215,7 +215,7 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
         <div className="glass-card p-4 sm:p-5 flex flex-col justify-between bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40">
           <div>
             <div className="flex items-center justify-between text-rose-700 dark:text-rose-400 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">High AI Priority</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">High Priority</span>
               <div className="w-8 h-8 rounded-xl bg-rose-100/80 dark:bg-rose-950/60 border border-rose-200/80 dark:border-rose-800/40 text-rose-700 dark:text-rose-400 flex items-center justify-center backdrop-blur-md">
                 <ShieldAlert className="w-4 h-4" />
               </div>
@@ -326,7 +326,7 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
               Inbox Email Distribution by Category
             </h3>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-              Visual breakdown of scanned recurring emails across AI-detected subscription categories.
+              Visual breakdown of scanned recurring emails across subscription categories.
             </p>
           </div>
 
