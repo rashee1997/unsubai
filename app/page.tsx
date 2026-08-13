@@ -11,7 +11,8 @@ import { UnsubscribeConfirmModal } from '@/components/UnsubscribeConfirmModal';
 import { BulkTrashConfirmModal } from '@/components/BulkTrashConfirmModal';
 import { ClientIdModal } from '@/components/ClientIdModal';
 import { Sparkles, Search, ShieldAlert, CheckCircle2, History, AlertCircle, RefreshCw, Mail, ArrowRight, Send, Trash2, Globe, Tag, X, FilterX, AtSign, Check, SlidersHorizontal } from 'lucide-react';
-import { getStoredSettings, compileCombinedCustomInstructions } from '@/lib/settings';
+import { getStoredSettings, compileCombinedCustomInstructions, saveStoredSettings, CustomFilterRule, AppSettings } from '@/lib/settings';
+import { GeminiChatbot } from '@/components/GeminiChatbot';
 import { filterSendersFuzzy } from '@/lib/fuzzySearch';
 
 declare global {
@@ -213,6 +214,110 @@ export default function Home() {
   // Email Full Preview Modal State
   const [previewingSender, setPreviewingSender] = useState<GroupedSenderData | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  // App Settings State & Chatbot Live CRUD Callbacks
+  const [appSettings, setAppSettings] = useState<AppSettings>(() => getStoredSettings());
+
+  const handleChatbotUnsubscribe = async (senderKeys: string[], autoTrash: boolean) => {
+    const targets = senders.filter((s) => senderKeys.includes(s.senderKey) || senderKeys.includes(s.fromEmail));
+    if (targets.length === 0) {
+      const fallbacks: GroupedSenderData[] = senderKeys.map((k) => ({
+        senderKey: k,
+        fromName: k.split('@')[0],
+        fromEmail: k,
+        domain: k.split('@')[1] || 'custom.com',
+        totalEmails: 1,
+        unreadCount: 1,
+        latestDate: 'Just now',
+        latestTimestamp: Date.now(),
+        sampleSubject: 'Direct Chatbot Unsubscribe',
+        sampleSnippet: 'Unsubscribed via Gemini AI Chatbot agent',
+        unsubscribeUrl: `https://${k.split('@')[1] || 'custom.com'}/unsubscribe`,
+        unsubscribeMailto: null,
+        unsubscribePostHeader: null,
+        messageIds: [],
+        unreadMessageIds: [],
+        analysis: {
+          senderKey: k,
+          unsubscribePriority: 'high',
+          recommendationScore: 90,
+          category: 'Chatbot Targeted',
+          summary: 'Unsubscribed directly via Gemini Chatbot',
+          isSensitive: false,
+        },
+      }));
+      await handleExecuteConfirmedUnsubscribes(fallbacks, autoTrash);
+    } else {
+      await handleExecuteConfirmedUnsubscribes(targets, autoTrash);
+    }
+  };
+
+  const handleChatbotTrash = async (senderKeys: string[]) => {
+    const targets = senders.filter((s) => senderKeys.includes(s.senderKey) || senderKeys.includes(s.fromEmail));
+    if (targets.length > 0) {
+      await handleExecuteBulkTrashHighPriority(targets);
+    }
+  };
+
+  const handleChatbotUpdatePriority = (
+    senderKey: string,
+    newPriority: 'high' | 'medium' | 'low',
+    isJobRelated?: boolean
+  ) => {
+    setSenders((prev) =>
+      prev.map((s) => {
+        if (s.senderKey === senderKey || s.fromEmail === senderKey) {
+          return {
+            ...s,
+            analysis: {
+              ...(s.analysis || {
+                senderKey: s.senderKey,
+                recommendationScore: newPriority === 'high' ? 90 : 20,
+                category: 'Updated',
+                summary: 'Priority updated via Gemini Chatbot',
+                isSensitive: newPriority === 'low',
+              }),
+              unsubscribePriority: newPriority,
+              isJobRelated: isJobRelated !== undefined ? isJobRelated : s.analysis?.isJobRelated || false,
+            },
+          };
+        }
+        return s;
+      })
+    );
+  };
+
+  const handleChatbotAddRule = (rule: Omit<CustomFilterRule, 'id' | 'enabled'>) => {
+    const current = getStoredSettings();
+    const newRule: CustomFilterRule = {
+      ...rule,
+      id: `custom_${Date.now()}`,
+      enabled: true,
+    };
+    const updated = {
+      ...current,
+      presetRules: [newRule, ...current.presetRules],
+    };
+    saveStoredSettings(updated);
+    setAppSettings(updated);
+  };
+
+  const handleChatbotUpdateScanConfig = (newConfig: any) => {
+    setScanConfig((prev) => ({ ...prev, ...newConfig }));
+  };
+
+  const handleChatbotAddProtectedDomain = (domainOrEmail: string) => {
+    const current = getStoredSettings();
+    const updatedText = current.customInstructionsText
+      ? `${current.customInstructionsText}\n- ALWAYS PROTECT: ${domainOrEmail}`
+      : `- ALWAYS PROTECT: ${domainOrEmail}`;
+    const updated = {
+      ...current,
+      customInstructionsText: updatedText,
+    };
+    saveStoredSettings(updated);
+    setAppSettings(updated);
+  };
 
   // Save updated Client ID
   const handleSaveClientId = (newId: string) => {
@@ -1120,6 +1225,24 @@ export default function Home() {
         isCleaning={previewingSender ? Boolean(cleaningMap[previewingSender.senderKey]) : false}
         isUnsubscribed={previewingSender ? unsubscribedSet.has(previewingSender.senderKey) : false}
         isCleaned={previewingSender ? cleanedSet.has(previewingSender.senderKey) : false}
+      />
+
+      {/* Gemini Agentic Chatbot (Fixed in Bottom-Right Corner with Auto Trigger Help Notifications) */}
+      <GeminiChatbot
+        senders={senders}
+        scanConfig={scanConfig}
+        settings={appSettings}
+        auditLogs={auditLogs}
+        isConnected={Boolean(accessToken)}
+        userEmail={userEmail}
+        hasScanned={hasScanned}
+        onExecuteUnsubscribe={handleChatbotUnsubscribe}
+        onExecuteTrash={handleChatbotTrash}
+        onUpdatePriority={handleChatbotUpdatePriority}
+        onAddRule={handleChatbotAddRule}
+        onUpdateScanConfig={handleChatbotUpdateScanConfig}
+        onTriggerScan={runScan}
+        onAddProtectedDomain={handleChatbotAddProtectedDomain}
       />
     </div>
   );
