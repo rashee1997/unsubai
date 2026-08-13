@@ -89,12 +89,6 @@ export function GeminiChatbot({
   const [isMinimized, setIsMinimized] = useState(false);
   const [systemRole, setSystemRole] = useState<'inbox_agent' | 'privacy_expert' | 'strict_cleaner'>('inbox_agent');
 
-  // Auto Trigger & Help Notifications State
-  const [showAutoTriggerBanner, setShowAutoTriggerBanner] = useState(false);
-  const [autoHelpText, setAutoHelpText] = useState<string | null>(null);
-  const [hasDismissedHelp, setHasDismissedHelp] = useState(false);
-  const [autoTriggerEnabled, setAutoTriggerEnabled] = useState(true);
-
   // Chat History & Inputs
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -108,47 +102,12 @@ export function GeminiChatbot({
         {
           id: 'welcome-1',
           role: 'model',
-          content: `👋 Hello! I am your **Smart Assistant**. I can help you search senders, automate unsubscriptions, update rules, and keep your inbox clean with **confirmation before any changes**.\n\nHow can I help organize your inbox today?`,
+          content: `Hello! I am your **Gemini Assistant**. I can help you search senders, unsubscribe from newsletters, update filter rules, and organize your inbox with **confirmation before any changes**.\n\nHow can I assist you today?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
     }
   }, [messages.length]);
-
-  // Auto Trigger / Proactive Notification Logic
-  useEffect(() => {
-    if (!autoTriggerEnabled || hasDismissedHelp) return;
-
-    // Trigger proactive help notification when scan finishes or when user arrives
-    if (hasScanned && senders.length > 0) {
-      const highPriority = senders.filter((s) => s.analysis?.unsubscribePriority === 'high');
-      const jobAlerts = senders.filter((s) => s.analysis?.isJobRelated);
-
-      let text = `💡 **Scan complete!** Found ${senders.length} senders.`;
-      if (highPriority.length > 0) {
-        text = `🔥 **${highPriority.length} High-Priority newsletters** detected! Click to review and unsubscribe.`;
-      } else if (jobAlerts.length > 0) {
-        text = `💼 **${jobAlerts.length} Job Alerts protected**. Need me to update filter rules or clean promos?`;
-      }
-
-      setAutoHelpText(text);
-      setShowAutoTriggerBanner(true);
-
-      // Auto dismiss after 12 seconds if not clicked
-      const timer = setTimeout(() => {
-        setShowAutoTriggerBanner(false);
-      }, 12000);
-      return () => clearTimeout(timer);
-    } else if (!hasScanned) {
-      const timer = setTimeout(() => {
-        if (!hasScanned) {
-          setAutoHelpText('✨ Need help organizing your Gmail inbox? Open the assistant to automate email cleanup!');
-          setShowAutoTriggerBanner(true);
-        }
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [hasScanned, senders, autoTriggerEnabled, hasDismissedHelp]);
 
   // Auto Scroll Chat
   const scrollToBottom = () => {
@@ -493,81 +452,33 @@ export function GeminiChatbot({
   return (
     <>
       {/* ========================================================= */}
-      {/* AUTO TRIGGER / PROACTIVE HELP BUBBLE (BOTTOM-RIGHT CORNER) */}
-      {/* ========================================================= */}
-      {!isOpen && showAutoTriggerBanner && autoHelpText && (
-        <div className="fixed bottom-20 right-4 sm:right-6 z-50 max-w-xs sm:max-w-sm w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="relative rounded-2xl bg-white/95 dark:bg-[#18181B]/95 border border-indigo-200 dark:border-indigo-500/30 p-4 shadow-2xl shadow-indigo-500/10 text-slate-900 dark:text-zinc-100 backdrop-blur-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shrink-0 mt-0.5 shadow-md shadow-indigo-500/20">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                    Gemini AI Assistant
-                  </h4>
-                  <p className="text-xs text-slate-700 dark:text-zinc-300 mt-1 leading-relaxed">
-                    {autoHelpText.replace(/\*\*/g, '')}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowAutoTriggerBanner(false);
-                  setHasDismissedHelp(true);
-                }}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1 rounded-lg transition-colors cursor-pointer"
-                title="Dismiss hint"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="mt-3 pt-2 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Auto-triggered helper</span>
-              <button
-                onClick={() => {
-                  setIsOpen(true);
-                  setIsMinimized(false);
-                  setShowAutoTriggerBanner(false);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer active:scale-95"
-              >
-                <span>Open AI Chat</span>
-                <Sparkles className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* POPUP AI CHATBOT TRIGGER BUTTON (BOTTOM-RIGHT CORNER)    */}
+      {/* ROUND ICON-ONLY GEMINI TRIGGER BUTTON WITH HOVER TOOLTIP   */}
       {/* ========================================================= */}
       {!isOpen && (
-        <button
-          onClick={() => {
-            setIsOpen(true);
-            setIsMinimized(false);
-            setShowAutoTriggerBanner(false);
-          }}
-          className="fixed bottom-6 right-4 sm:right-6 z-50 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-600/30 border border-indigo-400/30 flex items-center gap-3 transition-all duration-300 hover:scale-105 active:scale-95 group cursor-pointer"
-          title="Open Gemini AI Agent Chat"
-        >
-          <div className="relative flex items-center justify-center">
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white animate-pulse" />
-            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border-2 border-indigo-900"></span>
-            </span>
+        <div className="fixed bottom-6 right-4 sm:right-6 z-50 group flex items-center">
+          {/* Beautiful Hover Tooltip */}
+          <div className="absolute right-full mr-3 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap px-3.5 py-2 rounded-xl bg-slate-900/95 dark:bg-zinc-800/95 text-white text-xs font-semibold border border-slate-700/60 dark:border-zinc-700/60 shadow-2xl backdrop-blur-xl flex items-center gap-2 translate-x-2 group-hover:translate-x-0">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span>Open Gemini Assistant</span>
           </div>
 
-          <div className="hidden sm:flex flex-col text-left">
-            <span className="text-xs font-bold tracking-wide uppercase leading-none">AI Assistant</span>
-            <span className="text-xs text-indigo-200 font-medium opacity-90 mt-1">Inbox Workflows</span>
-          </div>
-        </button>
+          {/* Round Floating Icon-Only Button */}
+          <button
+            onClick={() => {
+              setIsOpen(true);
+              setIsMinimized(false);
+            }}
+            className="w-13 h-13 rounded-full bg-gradient-to-tr from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-600/30 border border-indigo-400/30 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer relative"
+            aria-label="Open Gemini Assistant"
+          >
+            <Sparkles className="w-6 h-6 text-white" />
+            <span className="absolute top-0.5 right-0.5 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-indigo-900"></span>
+            </span>
+          </button>
+        </div>
       )}
 
       {/* ========================================================= */}

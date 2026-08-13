@@ -726,15 +726,15 @@ export default function Home() {
             <div className="max-w-2xl relative z-10">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold border border-indigo-200 dark:border-indigo-500/20 mb-4">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Smart Gmail Unsubscriber with Safety Confirmation</span>
+                <span>Gmail Unsubscribe & Filter Assistant</span>
               </div>
 
               <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
-                Review unopened emails & explicitly confirm unsubscriptions.
+                Review unopened emails & manage unsubscriptions safely.
               </h1>
 
               <p className="text-slate-600 dark:text-zinc-400 text-sm sm:text-base mt-3 leading-relaxed">
-                Connect your Gmail account to automatically categorize newsletter subscriptions, score priority levels, and review unsubscriptions with confidence.
+                Connect your Gmail account to categorize subscription emails, evaluate priority levels, and unsubscribe with explicit confirmation.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -743,7 +743,7 @@ export default function Home() {
                   className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 cursor-pointer active:scale-95"
                 >
                   <Mail className="w-4 h-4" />
-                  <span>Connect Gmail & Start Free Scan</span>
+                  <span>Connect Gmail Account</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>
 
@@ -751,7 +751,7 @@ export default function Home() {
                   onClick={runScan}
                   className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-300 font-semibold text-sm transition-colors border border-slate-200 dark:border-zinc-700/80 cursor-pointer"
                 >
-                  Preview Demo Mode
+                  Try Demo Mode
                 </button>
               </div>
             </div>
