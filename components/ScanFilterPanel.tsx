@@ -128,6 +128,7 @@ export const ScanFilterPanel: React.FC<ScanFilterPanelProps> = ({
             onClick={onStartScan}
             disabled={isScanning || !isConnected}
             className="inline-flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Scan inbox using active filters (Shortcut: S)"
           >
             {isScanning ? (
               <>
@@ -138,6 +139,9 @@ export const ScanFilterPanel: React.FC<ScanFilterPanelProps> = ({
               <>
                 <Sparkles className="w-4 h-4 text-amber-300" />
                 <span>Scan Inbox</span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] bg-indigo-800 text-indigo-100 rounded font-mono font-bold ml-1">
+                  S
+                </kbd>
               </>
             )}
           </button>
