@@ -15,6 +15,7 @@ import { getStoredSettings, compileCombinedCustomInstructions, saveStoredSetting
 import { GeminiChatbot } from '@/components/GeminiChatbot';
 import { filterSendersFuzzy } from '@/lib/fuzzySearch';
 import { classifySender, isJobAlertSender } from '@/lib/classification';
+import { useToast } from '@/components/Toast';
 
 declare global {
   interface Window {
@@ -158,6 +159,7 @@ const SAMPLE_SENDERS: GroupedSenderData[] = [
 ];
 
 export default function Home() {
+  const { toast } = useToast();
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => {
@@ -462,6 +464,9 @@ export default function Home() {
         setHasScanned(true);
         setIsScanning(false);
         setIsDemoMode(true);
+        toast.info(`Loaded ${SAMPLE_SENDERS.length} demo subscription senders. Connect Gmail to scan your live inbox.`, {
+          title: 'Demo Mode Loaded',
+        });
       }, 1200);
       return;
     }
@@ -511,6 +516,9 @@ export default function Home() {
       setSenders(classifiedSenders);
       setHasScanned(true);
       setIsDemoMode(false);
+      toast.success(`Identified ${classifiedSenders.length} recurring subscription sender${classifiedSenders.length === 1 ? '' : 's'}.`, {
+        title: 'Inbox Scan Complete',
+      });
 
       // Asynchronously trigger AI Deep Analysis to enrich summaries & categories if senders found
       if (classifiedSenders.length > 0) {
@@ -559,9 +567,9 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error('Error scanning Gmail:', err);
-      setErrorMessage(
-        err.message || 'Failed to scan inbox. Ensure permissions are granted or try Demo Mode.'
-      );
+      const errMsg = err.message || 'Failed to scan inbox. Ensure permissions are granted or try Demo Mode.';
+      setErrorMessage(errMsg);
+      toast.error(errMsg, { title: 'Scan Error' });
 
       // Fallback to demo mode so user experiences full app features
       if (senders.length === 0) {
@@ -601,6 +609,9 @@ export default function Home() {
   const handleExecuteBulkTrashHighPriority = async (candidates: GroupedSenderData[]) => {
     setIsBulkTrashProcessing(true);
     setBulkTrashProcessedCount(0);
+    let successCount = 0;
+    let failureCount = 0;
+    let totalMessagesTrashed = 0;
 
     for (let i = 0; i < candidates.length; i++) {
       const sender = candidates[i];
@@ -613,6 +624,8 @@ export default function Home() {
           await new Promise((r) => setTimeout(r, 300));
           setCleanedSet((prev) => new Set(prev).add(key));
           setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+          successCount++;
+          totalMessagesTrashed += sender.totalEmails;
 
           setAuditLogs((prev) => [
             {
@@ -642,9 +655,12 @@ export default function Home() {
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             console.error(`Failed to bulk trash messages for ${key}:`, err);
+            failureCount++;
           } else {
             setCleanedSet((prev) => new Set(prev).add(key));
             setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+            successCount++;
+            totalMessagesTrashed += sender.totalEmails;
 
             setAuditLogs((prev) => [
               {
@@ -662,6 +678,7 @@ export default function Home() {
         }
       } catch (err: any) {
         console.error('Error during bulk trash operation:', err);
+        failureCount++;
       } finally {
         setCleaningMap((prev) => ({ ...prev, [key]: false }));
         setBulkTrashProcessedCount(i + 1);
@@ -670,6 +687,30 @@ export default function Home() {
 
     setIsBulkTrashProcessing(false);
     setBulkTrashModalOpen(false);
+
+    if (failureCount === 0 && successCount > 0) {
+      toast.success(
+        `Moved ${successCount} sender${successCount > 1 ? 's' : ''} (${totalMessagesTrashed} email${totalMessagesTrashed > 1 ? 's' : ''}) to Trash.`,
+        {
+          title: 'Bulk Trash Completed',
+          description: 'Your selected emails have been moved to Trash safely.',
+        }
+      );
+    } else if (failureCount > 0 && successCount > 0) {
+      toast.warning(
+        `Moved ${successCount} of ${candidates.length} senders to Trash. ${failureCount} failed.`,
+        {
+          title: 'Partial Bulk Trash',
+        }
+      );
+    } else if (failureCount > 0 && successCount === 0) {
+      toast.error(
+        `Failed to bulk trash emails for ${failureCount} sender${failureCount > 1 ? 's' : ''}.`,
+        {
+          title: 'Bulk Trash Failed',
+        }
+      );
+    }
   };
 
   // Execute Confirmed Unsubscriptions
@@ -679,6 +720,9 @@ export default function Home() {
   ) => {
     setIsBatchProcessing(true);
     setBatchProcessedCount(0);
+    let successCount = 0;
+    let failureCount = 0;
+    let trashedMessagesCount = 0;
 
     for (let i = 0; i < selectedSenders.length; i++) {
       const sender = selectedSenders[i];
@@ -690,10 +734,12 @@ export default function Home() {
         if (isDemoMode || !accessToken) {
           await new Promise((r) => setTimeout(r, 400));
           setUnsubscribedSet((prev) => new Set(prev).add(key));
+          successCount++;
 
           if (autoTrashEmails) {
             setCleanedSet((prev) => new Set(prev).add(key));
             setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+            trashedMessagesCount += sender.totalEmails;
           }
 
           setAuditLogs((prev) => [
@@ -727,6 +773,7 @@ export default function Home() {
           if (!res.ok) throw new Error(data.error || 'Unsubscribe failed');
 
           setUnsubscribedSet((prev) => new Set(prev).add(key));
+          successCount++;
 
           if (autoTrashEmails && sender.messageIds.length > 0) {
             await fetch('/api/gmail/cleanup', {
@@ -742,6 +789,7 @@ export default function Home() {
             });
             setCleanedSet((prev) => new Set(prev).add(key));
             setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+            trashedMessagesCount += sender.totalEmails;
           }
 
           setAuditLogs((prev) => [
@@ -759,6 +807,7 @@ export default function Home() {
         }
       } catch (err: any) {
         console.error('Error unsubscribing', err);
+        failureCount++;
       } finally {
         setUnsubscribingMap((prev) => ({ ...prev, [key]: false }));
         setBatchProcessedCount(i + 1);
@@ -767,6 +816,32 @@ export default function Home() {
 
     setIsBatchProcessing(false);
     setConfirmModalOpen(false);
+
+    if (failureCount === 0 && successCount > 0) {
+      const isBulk = selectedSenders.length > 1;
+      const msg = isBulk
+        ? `Successfully unsubscribed from ${successCount} senders${autoTrashEmails ? ` and moved ${trashedMessagesCount} emails to Trash.` : '.'}`
+        : `Successfully unsubscribed from ${selectedSenders[0].fromName || selectedSenders[0].fromEmail}${autoTrashEmails ? ` and trashed ${trashedMessagesCount} emails.` : '.'}`;
+
+      toast.success(msg, {
+        title: isBulk ? 'Bulk Unsubscribe Complete' : 'Unsubscribed Successfully',
+        description: 'Unsubscribe requests have been sent.',
+      });
+    } else if (failureCount > 0 && successCount > 0) {
+      toast.warning(
+        `Unsubscribed from ${successCount} of ${selectedSenders.length} senders (${failureCount} failed).`,
+        {
+          title: 'Partial Unsubscribe',
+        }
+      );
+    } else if (failureCount > 0 && successCount === 0) {
+      toast.error(
+        `Failed to unsubscribe from ${failureCount} sender${failureCount > 1 ? 's' : ''}.`,
+        {
+          title: 'Unsubscribe Failed',
+        }
+      );
+    }
   };
 
   // Handle Batch Inbox Cleanup Action (Trash/Archive)
@@ -779,6 +854,11 @@ export default function Home() {
         await new Promise((r) => setTimeout(r, 500));
         setCleanedSet((prev) => new Set(prev).add(key));
         setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+        const actionLabel = action === 'trash' ? 'moved to Trash' : action === 'archive' ? 'archived' : 'marked as read';
+        toast.success(
+          `${sender.totalEmails} email(s) from ${sender.fromName || sender.fromEmail} ${actionLabel} (Demo).`,
+          { title: 'Cleanup Completed' }
+        );
         return;
       }
 
@@ -801,8 +881,18 @@ export default function Home() {
 
       setCleanedSet((prev) => new Set(prev).add(key));
       setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
+
+      const actionLabel = action === 'trash' ? 'moved to Trash' : action === 'archive' ? 'archived' : 'marked as read';
+      toast.success(
+        `${sender.totalEmails} email(s) from ${sender.fromName || sender.fromEmail} ${actionLabel}.`,
+        { title: 'Cleanup Completed' }
+      );
     } catch (err: any) {
-      setErrorMessage(`Cleanup error: ${err.message}`);
+      const errMsg = `Cleanup error: ${err.message}`;
+      setErrorMessage(errMsg);
+      toast.error(`Failed to ${action} emails from ${sender.fromName || sender.fromEmail}: ${err.message}`, {
+        title: 'Cleanup Error',
+      });
     } finally {
       setCleaningMap((prev) => ({ ...prev, [key]: false }));
     }

@@ -34,9 +34,11 @@ import {
   saveStoredSettings,
   DEFAULT_PRESET_RULES,
 } from '@/lib/settings';
+import { useToast } from '@/components/Toast';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(() => getStoredSettings());
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [newRuleTitle, setNewRuleTitle] = useState('');
@@ -54,6 +56,9 @@ export default function SettingsPage() {
   const handleSave = () => {
     saveStoredSettings(settings);
     setSavedSuccess(true);
+    toast.success('Your custom rules, Gemini instructions, and scan preferences have been saved.', {
+      title: 'Settings Saved',
+    });
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
@@ -73,6 +78,9 @@ export default function SettingsPage() {
       setSettings(def);
       saveStoredSettings(def);
       setSavedSuccess(true);
+      toast.info('Rules and scan configuration have been reset to factory defaults.', {
+        title: 'Settings Reset',
+      });
       setTimeout(() => setSavedSuccess(false), 3000);
     }
   };
