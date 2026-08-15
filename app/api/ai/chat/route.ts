@@ -1,6 +1,6 @@
 import { Type, FunctionDeclaration } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiClient, generateContentWithFallback, generateContentStreamWithFallback } from '@/lib/gemini';
+import { getGeminiClient, generateContentWithFallback } from '@/lib/gemini';
 
 // Define enhanced function declarations for Gemini Agent tools
 const crudTools: FunctionDeclaration[] = [
@@ -181,7 +181,6 @@ export async function POST(req: NextRequest) {
       messages,
       systemRole = 'inbox_agent',
       context = {},
-      stream = true,
     } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -268,33 +267,8 @@ CORE RULES & AGENTIC BEHAVIOR:
       };
     });
 
-    if (!stream) {
-      // Non-streaming fallback mode
-      const { response, modelUsed } = await generateContentWithFallback(ai, {
-        contents: formattedContents,
-        config: {
-          systemInstruction,
-          tools: [{ functionDeclarations: crudTools }],
-        },
-      });
-
-      console.info(`[Gemini Chat] Successfully generated non-stream response using model: ${modelUsed}`);
-
-      const candidate = response.candidates?.[0];
-      const textOutput = response.text || '';
-      const functionCalls = candidate?.content?.parts
-        ?.filter((p: any) => p.functionCall)
-        ?.map((p: any) => p.functionCall);
-
-      return NextResponse.json({
-        text: textOutput,
-        functionCalls: functionCalls && functionCalls.length > 0 ? functionCalls : null,
-        modelUsed,
-      });
-    }
-
-    // Streaming mode using generateContentStreamWithFallback
-    const { responseStream, modelUsed } = await generateContentStreamWithFallback(ai, {
+    // Call Gemini with tools with automatic model fallback (gemini-3.7-flash -> gemini-3.6-flash -> gemini-3.5-flash-lite)
+    const { response, modelUsed } = await generateContentWithFallback(ai, {
       contents: formattedContents,
       config: {
         systemInstruction,
@@ -302,51 +276,18 @@ CORE RULES & AGENTIC BEHAVIOR:
       },
     });
 
-    console.info(`[Gemini Chat Stream] Successfully initialized stream using model: ${modelUsed}`);
+    console.info(`[Gemini Chat] Successfully generated response using model: ${modelUsed}`);
 
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of responseStream) {
-            const chunkText = chunk.text || '';
-            const calls = chunk.candidates?.[0]?.content?.parts
-              ?.filter((p: any) => p.functionCall)
-              ?.map((p: any) => p.functionCall);
+    const candidate = response.candidates?.[0];
+    const textOutput = response.text || '';
+    const functionCalls = candidate?.content?.parts
+      ?.filter((p: any) => p.functionCall)
+      ?.map((p: any) => p.functionCall);
 
-            if (chunkText) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: 'text', text: chunkText })}\n\n`)
-              );
-            }
-
-            if (calls && calls.length > 0) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ type: 'functionCalls', functionCalls: calls })}\n\n`)
-              );
-            }
-          }
-
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'done', modelUsed })}\n\n`)
-          );
-          controller.close();
-        } catch (err: any) {
-          console.error('[Gemini Chat Stream Loop Error]:', err);
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: 'error', error: err?.message || 'Stream error' })}\n\n`)
-          );
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-      },
+    return NextResponse.json({
+      text: textOutput,
+      functionCalls: functionCalls && functionCalls.length > 0 ? functionCalls : null,
+      modelUsed,
     });
   } catch (error: any) {
     console.error('Error in Gemini Chatbot route:', error);

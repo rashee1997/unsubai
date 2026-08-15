@@ -73,38 +73,3 @@ export async function generateContentWithFallback(
 
   throw lastError || new Error('All Gemini fallback models (gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash-lite) failed.');
 }
-
-export interface GenerateStreamWithFallbackResult {
-  responseStream: any;
-  modelUsed: string;
-}
-
-/**
- * Executes a generateContentStream call against Gemini with automatic fallback to
- * gemini-3.6-flash and gemini-3.5-flash-lite if the primary model fails.
- */
-export async function generateContentStreamWithFallback(
-  ai: GoogleGenAI,
-  params: GenerateWithFallbackParams
-): Promise<GenerateStreamWithFallbackResult> {
-  const modelsToTry = params.models && params.models.length > 0 ? params.models : GEMINI_FALLBACK_MODELS;
-  let lastError: any = null;
-
-  for (const model of modelsToTry) {
-    try {
-      const responseStream = await ai.models.generateContentStream({
-        model,
-        contents: params.contents,
-        config: params.config,
-      });
-
-      return { responseStream, modelUsed: model };
-    } catch (err: any) {
-      console.warn(`[Gemini Stream Fallback] Model ${model} encountered an issue: ${err?.message || err}. Trying next fallback model...`);
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error('All Gemini fallback models failed to initialize stream.');
-}
-
