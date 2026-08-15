@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { classifySender } from '@/lib/classification';
 import {
   ShieldAlert,
@@ -262,22 +263,57 @@ export const SenderCard: React.FC<SenderCardProps> = ({
   };
 
   return (
-    <div
-      className={`glass-card overflow-hidden transition-all duration-300 ${
+    <motion.div
+      layout
+      initial={false}
+      animate={{
+        scale: isUnsubscribed ? [1, 1.015, 1] : 1,
+        transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+      }}
+      className={`glass-card relative overflow-hidden transition-colors duration-500 ${
         isUnsubscribed
-          ? 'border-emerald-300/80 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20 opacity-85'
+          ? 'border-emerald-300/90 dark:border-emerald-700/80 bg-emerald-50/40 dark:bg-emerald-950/25 opacity-90 shadow-sm shadow-emerald-500/5'
           : isHighPriority
           ? 'border-rose-300/80 dark:border-rose-800/60 hover:border-rose-500'
           : 'hover:border-slate-300 dark:hover:border-zinc-700'
       }`}
     >
+      {/* Top subtle success shimmer beam */}
+      <AnimatePresence>
+        {isUnsubscribed && (
+          <motion.div
+            initial={{ opacity: 0, scaleX: 0 }}
+            animate={{ opacity: 1, scaleX: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 dark:from-emerald-500 dark:via-teal-400 dark:to-emerald-400 z-20 origin-left"
+          />
+        )}
+      </AnimatePresence>
+
       <div className="p-5 sm:p-6">
         {/* Top Header Row */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-white/10">
           <div className="flex items-start space-x-3">
-            {/* Domain Avatar Badge */}
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 dark:bg-zinc-800/80 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center uppercase shrink-0 text-sm border border-indigo-200/80 dark:border-zinc-700/80 backdrop-blur-md">
-              {sender.fromName.charAt(0) || 'M'}
+            {/* Domain Avatar Badge with animated checkmark overlay */}
+            <div className="relative shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 dark:bg-zinc-800/80 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center uppercase text-sm border border-indigo-200/80 dark:border-zinc-700/80 backdrop-blur-md">
+                {sender.fromName.charAt(0) || 'M'}
+              </div>
+              <AnimatePresence>
+                {isUnsubscribed && (
+                  <motion.div
+                    initial={{ scale: 0, rotate: -45 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    exit={{ scale: 0 }}
+                    transition={{ type: 'spring', stiffness: 450, damping: 20 }}
+                    className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 dark:bg-emerald-600 text-white flex items-center justify-center shadow-xs border-2 border-white dark:border-zinc-900"
+                    title="Unsubscribed"
+                  >
+                    <Check className="w-3 h-3 stroke-[3]" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div>
@@ -287,21 +323,33 @@ export const SenderCard: React.FC<SenderCardProps> = ({
                   {analysis.category}
                 </span>
 
-                {analysis.isJobRelated && (
+                {isUnsubscribed && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.8, x: -4 }}
+                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100/90 dark:bg-emerald-950/90 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/80 shadow-xs backdrop-blur-md"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    Unsubscribed
+                  </motion.span>
+                )}
+
+                {analysis.isJobRelated && !isUnsubscribed && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100/90 dark:bg-sky-950/90 text-sky-800 dark:text-sky-300 border border-sky-300/80 dark:border-sky-500/60 shadow-xs backdrop-blur-md">
                     <Briefcase className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                     Job Alert
                   </span>
                 )}
 
-                {isHighPriority && !analysis.isJobRelated && (
+                {isHighPriority && !analysis.isJobRelated && !isUnsubscribed && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100/90 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300/80 dark:border-rose-800/60 backdrop-blur-md">
                     <ShieldAlert className="w-3 h-3 text-rose-600 dark:text-rose-400" />
                     High Priority
                   </span>
                 )}
 
-                {isLowPriority && !analysis.isJobRelated && (
+                {isLowPriority && !analysis.isJobRelated && !isUnsubscribed && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100/90 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800/60 backdrop-blur-md">
                     <ShieldCheck className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                     Low Priority
@@ -448,32 +496,89 @@ export const SenderCard: React.FC<SenderCardProps> = ({
         {/* Unsubscribe & Cleanup Action Bar */}
         <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center flex-wrap gap-2">
-            {/* Primary Unsubscribe Action */}
-            {isUnsubscribed ? (
-              <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-400 text-xs font-semibold border border-emerald-300/80 dark:border-emerald-800/60 backdrop-blur-md">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Unsubscribed</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onUnsubscribe(sender)}
-                disabled={isUnsubscribing}
-                className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50 active:scale-95 backdrop-blur-md"
-              >
-                {isUnsubscribing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Unsubscribing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Unsubscribe</span>
-                  </>
-                )}
-              </button>
-            )}
+            {/* Primary Unsubscribe Action with Framer Motion Animated Feedback */}
+            <AnimatePresence mode="wait" initial={false}>
+              {isUnsubscribed ? (
+                <motion.div
+                  key="unsubscribed-state"
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                  className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100/90 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-300/80 dark:border-emerald-700/80 backdrop-blur-md shadow-xs select-none"
+                >
+                  {/* Expanding subtle ripple ping */}
+                  <motion.span
+                    initial={{ scale: 0.85, opacity: 0.7 }}
+                    animate={{ scale: 1.45, opacity: 0 }}
+                    transition={{ duration: 0.75, ease: 'easeOut' }}
+                    className="absolute inset-0 rounded-full bg-emerald-400/40 pointer-events-none"
+                  />
+
+                  {/* Vector SVG Animated Drawing Checkmark */}
+                  <svg
+                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <motion.circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      animate={{ pathLength: 1, opacity: 1 }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                    />
+                    <motion.path
+                      d="m9 12 2 2 4-4"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 0.3, delay: 0.18, ease: 'easeOut' }}
+                    />
+                  </svg>
+
+                  <motion.span
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: 0.12 }}
+                  >
+                    Unsubscribed
+                  </motion.span>
+                </motion.div>
+              ) : isUnsubscribing ? (
+                <motion.div
+                  key="unsubscribing-state"
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.15 }}
+                  className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-indigo-600 text-white font-semibold text-xs shadow-xs backdrop-blur-md opacity-90"
+                >
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Unsubscribing...</span>
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="idle-state"
+                  type="button"
+                  onClick={() => onUnsubscribe(sender)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer active:scale-95 backdrop-blur-md"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Unsubscribe</span>
+                </motion.button>
+              )}
+            </AnimatePresence>
 
             {/* Trash emails */}
             <button
@@ -530,7 +635,7 @@ export const SenderCard: React.FC<SenderCardProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
