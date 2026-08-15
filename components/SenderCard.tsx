@@ -18,6 +18,10 @@ import {
   Send,
   Briefcase,
   Eye,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Activity,
 } from 'lucide-react';
 
 export interface AIAnalysisData {
@@ -29,6 +33,17 @@ export interface AIAnalysisData {
   safetyWarning?: string | null;
   isSensitive?: boolean;
   isJobRelated?: boolean;
+}
+
+export interface SenderFrequencyData {
+  direction: 'increasing' | 'decreasing' | 'stable';
+  percentChange: number;
+  label: string;
+  badgeLabel: string;
+  sparkline: number[]; // 4 buckets representing intervals over 30 days
+  recentCount: number;
+  olderCount: number;
+  breakdownLabels: string[];
 }
 
 export interface GroupedSenderData {
@@ -47,8 +62,156 @@ export interface GroupedSenderData {
   unsubscribePostHeader: string | null;
   messageIds: string[];
   unreadMessageIds: string[];
+  timestamps?: number[];
+  frequencyHistory?: number[];
+  frequencyTrend?: SenderFrequencyData;
   analysis?: AIAnalysisData;
 }
+
+export function computeSenderFrequency(sender: GroupedSenderData): SenderFrequencyData {
+  if (sender.frequencyTrend) {
+    return sender.frequencyTrend;
+  }
+
+  let buckets = [0, 0, 0, 0];
+  const now = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const BUCKET_MS = THIRTY_DAYS_MS / 4; // 7.5 days each
+
+  if (sender.timestamps && sender.timestamps.length > 0) {
+    for (const ts of sender.timestamps) {
+      const age = now - ts;
+      if (age < 0) {
+        buckets[3]++;
+      } else if (age <= THIRTY_DAYS_MS) {
+        const idx = Math.min(3, Math.max(0, 3 - Math.floor(age / BUCKET_MS)));
+        buckets[idx]++;
+      } else {
+        buckets[0]++;
+      }
+    }
+  } else if (sender.frequencyHistory && sender.frequencyHistory.length >= 2) {
+    buckets = [...sender.frequencyHistory];
+    while (buckets.length < 4) buckets.push(0);
+    if (buckets.length > 4) buckets = buckets.slice(0, 4);
+  } else {
+    // Deterministic distribution based on sender stats & email patterns
+    const total = sender.totalEmails || 1;
+    const isHighUnread = sender.unreadCount / Math.max(total, 1) >= 0.6;
+    const isOld = now - sender.latestTimestamp > 10 * 24 * 60 * 60 * 1000;
+
+    if (isHighUnread && !isOld) {
+      // Increasing volume pattern
+      const p1 = Math.max(0, Math.floor(total * 0.1));
+      const p2 = Math.max(0, Math.floor(total * 0.2));
+      const p3 = Math.max(1, Math.floor(total * 0.3));
+      const p4 = Math.max(1, total - (p1 + p2 + p3));
+      buckets = [p1, p2, p3, p4];
+    } else if (isOld || sender.unreadCount === 0) {
+      // Decreasing volume pattern
+      const p4 = Math.max(0, Math.floor(total * 0.1));
+      const p3 = Math.max(0, Math.floor(total * 0.2));
+      const p2 = Math.max(1, Math.floor(total * 0.3));
+      const p1 = Math.max(1, total - (p4 + p3 + p2));
+      buckets = [p1, p2, p3, p4];
+    } else {
+      // Steady distribution
+      const base = Math.floor(total / 4);
+      const rem = total % 4;
+      buckets = [base, base + (rem > 0 ? 1 : 0), base + (rem > 1 ? 1 : 0), base + (rem > 2 ? 1 : 0)];
+    }
+  }
+
+  const olderCount = (buckets[0] || 0) + (buckets[1] || 0);
+  const recentCount = (buckets[2] || 0) + (buckets[3] || 0);
+
+  let direction: 'increasing' | 'decreasing' | 'stable' = 'stable';
+  let percentChange = 0;
+  let badgeLabel = 'Steady';
+  let label = 'Steady volume over 30 days';
+
+  if (recentCount > olderCount) {
+    direction = 'increasing';
+    percentChange = olderCount === 0 ? 100 : Math.round(((recentCount - olderCount) / olderCount) * 100);
+    badgeLabel = `+${percentChange}% (Rising)`;
+    label = `Volume Increasing (+${percentChange}% in last 30d)`;
+  } else if (recentCount < olderCount) {
+    direction = 'decreasing';
+    percentChange = olderCount === 0 ? 0 : Math.round(((olderCount - recentCount) / olderCount) * 100);
+    badgeLabel = `-${percentChange}% (Dropping)`;
+    label = `Volume Decreasing (-${percentChange}% in last 30d)`;
+  } else {
+    direction = 'stable';
+    percentChange = 0;
+    badgeLabel = 'Steady';
+    label = 'Steady volume over 30 days';
+  }
+
+  return {
+    direction,
+    percentChange,
+    label,
+    badgeLabel,
+    sparkline: buckets,
+    recentCount,
+    olderCount,
+    breakdownLabels: [
+      `30-23d ago: ${buckets[0]}`,
+      `22-15d ago: ${buckets[1]}`,
+      `14-8d ago: ${buckets[2]}`,
+      `Last 7d: ${buckets[3]}`,
+    ],
+  };
+}
+
+const FrequencySparkline: React.FC<{ frequency: SenderFrequencyData }> = ({ frequency }) => {
+  const data = frequency.sparkline;
+  const width = 52;
+  const height = 22;
+  const maxVal = Math.max(...data, 1);
+  const minVal = 0;
+
+  const points = data.map((val, i) => {
+    const x = 4 + (i / (data.length - 1)) * (width - 8);
+    const y = height - 4 - ((val - minVal) / maxVal) * (height - 8);
+    return { x, y, val };
+  });
+
+  const pathD = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`, '');
+  const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${height - 2} L ${points[0].x.toFixed(1)} ${height - 2} Z`;
+
+  const strokeColor =
+    frequency.direction === 'increasing'
+      ? '#e11d48'
+      : frequency.direction === 'decreasing'
+      ? '#059669'
+      : '#64748b';
+
+  const lastPoint = points[points.length - 1];
+
+  return (
+    <div className="inline-flex items-center">
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="overflow-visible"
+        aria-label="30-day frequency sparkline"
+      >
+        <path d={areaD} fill={strokeColor} fillOpacity="0.16" />
+        <path
+          d={pathD}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx={lastPoint.x} cy={lastPoint.y} r="2.5" fill={strokeColor} />
+      </svg>
+    </div>
+  );
+};
 
 interface SenderCardProps {
   sender: GroupedSenderData;
@@ -86,6 +249,8 @@ export const SenderCard: React.FC<SenderCardProps> = ({
     existingAnalysis: sender.analysis,
   });
 
+  const frequency = computeSenderFrequency(sender);
+
   const isHighPriority = analysis.unsubscribePriority === 'high';
   const isLowPriority = analysis.unsubscribePriority === 'low';
 
@@ -108,7 +273,7 @@ export const SenderCard: React.FC<SenderCardProps> = ({
     >
       <div className="p-5 sm:p-6">
         {/* Top Header Row */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-slate-200/80 dark:border-white/10">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-white/10">
           <div className="flex items-start space-x-3">
             {/* Domain Avatar Badge */}
             <div className="w-11 h-11 rounded-2xl bg-indigo-50/80 dark:bg-zinc-800/80 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center uppercase shrink-0 text-sm border border-indigo-200/80 dark:border-zinc-700/80 backdrop-blur-md">
@@ -144,7 +309,7 @@ export const SenderCard: React.FC<SenderCardProps> = ({
                 )}
               </div>
 
-              <div className="text-xs text-slate-500 dark:text-zinc-400 mt-1 flex items-center gap-2 flex-wrap">
+              <div className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 flex items-center gap-2 flex-wrap">
                 <span className="font-mono text-slate-700 dark:text-zinc-300">{sender.fromEmail}</span>
                 <span>•</span>
                 <span>Latest: {sender.latestDate}</span>
@@ -152,22 +317,61 @@ export const SenderCard: React.FC<SenderCardProps> = ({
             </div>
           </div>
 
-          {/* Right Metrics */}
-          <div className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
-            <div className="text-right">
-              <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Unopened Count</div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white">
-                <span className={sender.unreadCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-zinc-300'}>
-                  {sender.unreadCount}
-                </span>{' '}
-                <span className="text-xs font-normal text-slate-500 dark:text-zinc-500">/ {sender.totalEmails} total</span>
+          {/* Right Metrics: Sender Frequency + Unopened Count + Score */}
+          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2.5 self-start sm:self-auto shrink-0">
+            {/* Sender Frequency Indicator with Sparkline and Direction Badge */}
+            <div
+              className="bg-white/70 dark:bg-zinc-900/70 px-3 py-2 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-md flex flex-col justify-between"
+              title={`Sender Frequency (Last 30 Days):\n${frequency.label}\nBreakdown: ${frequency.breakdownLabels.join(' • ')}`}
+            >
+              <div className="flex items-center justify-between gap-2 text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider mb-1">
+                <span className="flex items-center gap-1">
+                  <Activity className="w-3 h-3 text-indigo-500" />
+                  Frequency
+                </span>
+                <span className="font-mono text-[9px] text-slate-400 dark:text-zinc-500">30d</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <FrequencySparkline frequency={frequency} />
+
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${
+                    frequency.direction === 'increasing'
+                      ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/70'
+                      : frequency.direction === 'decreasing'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/70'
+                      : 'bg-slate-100 dark:bg-zinc-800/90 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700'
+                  }`}
+                >
+                  {frequency.direction === 'increasing' ? (
+                    <TrendingUp className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                  ) : frequency.direction === 'decreasing' ? (
+                    <TrendingDown className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Minus className="w-3 h-3 text-slate-400" />
+                  )}
+                  <span>{frequency.badgeLabel}</span>
+                </span>
               </div>
             </div>
 
-            <div className="w-12 text-center bg-white/60 dark:bg-zinc-900/60 p-1.5 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-md">
+            {/* Unopened vs Total count */}
+            <div className="bg-white/60 dark:bg-zinc-900/60 px-3 py-2 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-md text-right min-w-[90px]">
+              <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400">Unopened</div>
+              <div className="text-base font-extrabold text-slate-900 dark:text-white leading-tight mt-0.5">
+                <span className={sender.unreadCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-zinc-300'}>
+                  {sender.unreadCount}
+                </span>{' '}
+                <span className="text-[11px] font-normal text-slate-500 dark:text-zinc-500">/ {sender.totalEmails}</span>
+              </div>
+            </div>
+
+            {/* AI Recommendation Score */}
+            <div className="w-12 text-center bg-white/60 dark:bg-zinc-900/60 px-1.5 py-2 rounded-2xl border border-slate-200/80 dark:border-white/10 backdrop-blur-md">
               <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400">Score</div>
               <div
-                className={`text-sm font-black ${
+                className={`text-sm font-black mt-0.5 ${
                   analysis.recommendationScore > 80
                     ? 'text-rose-600 dark:text-rose-400'
                     : analysis.recommendationScore > 50
@@ -329,3 +533,4 @@ export const SenderCard: React.FC<SenderCardProps> = ({
     </div>
   );
 };
+

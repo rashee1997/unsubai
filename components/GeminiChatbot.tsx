@@ -228,7 +228,7 @@ export function GeminiChatbot({
         cleanedMessagesCount: auditLogs.reduce((acc, a) => acc + a.messagesAffected, 0),
       };
 
-      const res = await fetch('/app/api/ai/chat', {
+      const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,7 +273,7 @@ export function GeminiChatbot({
               },
             ] as any);
 
-            const followUpRes = await fetch('/app/api/ai/chat', {
+            const followUpRes = await fetch('/api/ai/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

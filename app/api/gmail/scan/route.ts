@@ -41,6 +41,18 @@ export interface GroupedSender {
   unsubscribePostHeader: string | null;
   messageIds: string[];
   unreadMessageIds: string[];
+  timestamps?: number[];
+  frequencyHistory?: number[];
+  frequencyTrend?: {
+    direction: 'increasing' | 'decreasing' | 'stable';
+    percentChange: number;
+    label: string;
+    badgeLabel: string;
+    sparkline: number[];
+    recentCount: number;
+    olderCount: number;
+    breakdownLabels: string[];
+  };
   analysis?: AIAnalysisData;
 }
 
@@ -311,6 +323,7 @@ export async function POST(req: NextRequest) {
           unsubscribePostHeader: msg.unsubscribePostHeader,
           messageIds: [msg.id],
           unreadMessageIds: msg.isUnread ? [msg.id] : [],
+          timestamps: [msg.timestamp],
         });
       } else {
         existing.totalEmails += 1;
@@ -319,6 +332,8 @@ export async function POST(req: NextRequest) {
           existing.unreadMessageIds.push(msg.id);
         }
         existing.messageIds.push(msg.id);
+        if (!existing.timestamps) existing.timestamps = [];
+        existing.timestamps.push(msg.timestamp);
 
         if (msg.timestamp > existing.latestTimestamp) {
           existing.latestTimestamp = msg.timestamp;
@@ -333,20 +348,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const now = Date.now();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const BUCKET_MS = THIRTY_DAYS_MS / 4;
+
     const sendersList = Array.from(senderMap.values())
-      .map((sender) => ({
-        ...sender,
-        analysis: classifySender({
-          senderKey: sender.senderKey,
-          fromName: sender.fromName,
-          fromEmail: sender.fromEmail,
-          domain: sender.domain,
-          totalEmails: sender.totalEmails,
-          unreadCount: sender.unreadCount,
-          sampleSubject: sender.sampleSubject,
-          sampleSnippet: sender.sampleSnippet,
-        }),
-      }))
+      .map((sender) => {
+        // Calculate 30-day frequency buckets: [30-23d ago, 22-15d ago, 14-8d ago, last 7d]
+        const buckets = [0, 0, 0, 0];
+        const timestamps = sender.timestamps || [sender.latestTimestamp];
+        for (const ts of timestamps) {
+          const age = now - ts;
+          if (age < 0) {
+            buckets[3]++;
+          } else if (age <= THIRTY_DAYS_MS) {
+            const idx = Math.min(3, Math.max(0, 3 - Math.floor(age / BUCKET_MS)));
+            buckets[idx]++;
+          } else {
+            buckets[0]++;
+          }
+        }
+
+        const olderCount = buckets[0] + buckets[1];
+        const recentCount = buckets[2] + buckets[3];
+        let direction: 'increasing' | 'decreasing' | 'stable' = 'stable';
+        let percentChange = 0;
+        let badgeLabel = 'Steady';
+        let label = 'Steady volume over 30 days';
+
+        if (recentCount > olderCount) {
+          direction = 'increasing';
+          percentChange = olderCount === 0 ? 100 : Math.round(((recentCount - olderCount) / olderCount) * 100);
+          badgeLabel = `+${percentChange}% (Rising)`;
+          label = `Volume Increasing (+${percentChange}% in last 30d)`;
+        } else if (recentCount < olderCount) {
+          direction = 'decreasing';
+          percentChange = olderCount === 0 ? 0 : Math.round(((olderCount - recentCount) / olderCount) * 100);
+          badgeLabel = `-${percentChange}% (Dropping)`;
+          label = `Volume Decreasing (-${percentChange}% in last 30d)`;
+        }
+
+        return {
+          ...sender,
+          frequencyHistory: buckets,
+          frequencyTrend: {
+            direction,
+            percentChange,
+            label,
+            badgeLabel,
+            sparkline: buckets,
+            recentCount,
+            olderCount,
+            breakdownLabels: [
+              `30-23d ago: ${buckets[0]}`,
+              `22-15d ago: ${buckets[1]}`,
+              `14-8d ago: ${buckets[2]}`,
+              `Last 7d: ${buckets[3]}`,
+            ],
+          },
+          analysis: classifySender({
+            senderKey: sender.senderKey,
+            fromName: sender.fromName,
+            fromEmail: sender.fromEmail,
+            domain: sender.domain,
+            totalEmails: sender.totalEmails,
+            unreadCount: sender.unreadCount,
+            sampleSubject: sender.sampleSubject,
+            sampleSnippet: sender.sampleSnippet,
+          }),
+        };
+      })
       .sort((a, b) => b.unreadCount - a.unreadCount || b.totalEmails - a.totalEmails);
 
     return NextResponse.json({
