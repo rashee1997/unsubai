@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { classifySender } from '@/lib/classification';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -73,15 +74,17 @@ export const SenderCard: React.FC<SenderCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [copiedFilter, setCopiedFilter] = useState(false);
 
-  const analysis: AIAnalysisData = sender.analysis || {
+  const analysis: AIAnalysisData = classifySender({
     senderKey: sender.senderKey,
-    unsubscribePriority: sender.unreadCount > 2 ? 'high' : 'medium',
-    recommendationScore: Math.min(60 + sender.unreadCount * 8, 98),
-    category: 'Newsletter & Promo',
-    summary: `Sender has ${sender.unreadCount} unread email(s) out of ${sender.totalEmails} scanned.`,
-    safetyWarning: null,
-    isSensitive: false,
-  };
+    fromName: sender.fromName,
+    fromEmail: sender.fromEmail,
+    domain: sender.domain,
+    totalEmails: sender.totalEmails,
+    unreadCount: sender.unreadCount,
+    sampleSubject: sender.sampleSubject,
+    sampleSnippet: sender.sampleSnippet,
+    existingAnalysis: sender.analysis,
+  });
 
   const isHighPriority = analysis.unsubscribePriority === 'high';
   const isLowPriority = analysis.unsubscribePriority === 'low';

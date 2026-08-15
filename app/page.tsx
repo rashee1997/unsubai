@@ -14,6 +14,7 @@ import { Sparkles, Search, ShieldAlert, CheckCircle2, History, AlertCircle, Refr
 import { getStoredSettings, compileCombinedCustomInstructions, saveStoredSettings, CustomFilterRule, AppSettings } from '@/lib/settings';
 import { GeminiChatbot } from '@/components/GeminiChatbot';
 import { filterSendersFuzzy } from '@/lib/fuzzySearch';
+import { classifySender, isJobAlertSender } from '@/lib/classification';
 
 declare global {
   interface Window {
@@ -161,11 +162,40 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('unsub_ai_client_id') || '';
+      const stored = localStorage.getItem('unsub_ai_client_id');
+      if (stored && stored.trim()) return stored.trim();
     }
-    return '';
+    return (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '').trim();
   });
   const [isClientIdModalOpen, setIsClientIdModalOpen] = useState(false);
+
+  // Auto-fetch Google Client ID from runtime environment variables / secrets
+  useEffect(() => {
+    async function loadClientConfig() {
+      try {
+        const res = await fetch('/api/auth/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.clientId && data.clientId.trim()) {
+            setClientId((prev) => {
+              const trimmed = data.clientId.trim();
+              if (!prev || prev !== trimmed) {
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('unsub_ai_client_id', trimmed);
+                }
+                return trimmed;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not auto-fetch Google Client ID from server config:', err);
+      }
+    }
+    loadClientConfig();
+  }, []);
+
 
   // Scan Configuration State
   const [scanConfig, setScanConfig] = useState<ScanConfig>({
@@ -329,8 +359,39 @@ export default function Home() {
   };
 
   // Google OAuth Popup Initializer
-  const handleConnect = useCallback(() => {
-    if (!clientId) {
+  const handleConnect = useCallback(async () => {
+    let activeClientId = clientId;
+
+    // If client ID is missing in state, attempt to load from localStorage or server auth config
+    if (!activeClientId) {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('unsub_ai_client_id');
+        if (stored && stored.trim()) {
+          activeClientId = stored.trim();
+          setClientId(activeClientId);
+        }
+      }
+    }
+
+    if (!activeClientId) {
+      try {
+        const res = await fetch('/api/auth/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.clientId && data.clientId.trim()) {
+            activeClientId = data.clientId.trim();
+            setClientId(activeClientId);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('unsub_ai_client_id', activeClientId);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch auth config:', e);
+      }
+    }
+
+    if (!activeClientId) {
       setIsClientIdModalOpen(true);
       return;
     }
@@ -342,7 +403,7 @@ export default function Home() {
 
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
+        client_id: activeClientId,
         scope:
           'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
         callback: async (response: any) => {
@@ -431,9 +492,71 @@ export default function Home() {
       }
 
       const data = await res.json();
-      setSenders(data.senders || []);
+      const rawSenders = data.senders || [];
+      const classifiedSenders: GroupedSenderData[] = rawSenders.map((s: any) => ({
+        ...s,
+        analysis: classifySender({
+          senderKey: s.senderKey,
+          fromName: s.fromName,
+          fromEmail: s.fromEmail,
+          domain: s.domain,
+          totalEmails: s.totalEmails,
+          unreadCount: s.unreadCount,
+          sampleSubject: s.sampleSubject,
+          sampleSnippet: s.sampleSnippet,
+          existingAnalysis: s.analysis,
+        }),
+      }));
+
+      setSenders(classifiedSenders);
       setHasScanned(true);
       setIsDemoMode(false);
+
+      // Asynchronously trigger AI Deep Analysis to enrich summaries & categories if senders found
+      if (classifiedSenders.length > 0) {
+        fetch('/api/ai/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senders: classifiedSenders,
+            customInstructions: combinedCustomInstructions,
+          }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((aiData) => {
+            if (aiData?.sendersAnalysis && Array.isArray(aiData.sendersAnalysis)) {
+              const analysisMap = new Map<string, any>(
+                aiData.sendersAnalysis.map((item: any) => [item.senderKey, item])
+              );
+
+              setSenders((current) =>
+                current.map((sender) => {
+                  const aiItem = analysisMap.get(sender.senderKey);
+                  if (aiItem) {
+                    return {
+                      ...sender,
+                      analysis: classifySender({
+                        senderKey: sender.senderKey,
+                        fromName: sender.fromName,
+                        fromEmail: sender.fromEmail,
+                        domain: sender.domain,
+                        totalEmails: sender.totalEmails,
+                        unreadCount: sender.unreadCount,
+                        sampleSubject: sender.sampleSubject,
+                        sampleSnippet: sender.sampleSnippet,
+                        existingAnalysis: aiItem,
+                      }),
+                    };
+                  }
+                  return sender;
+                })
+              );
+            }
+          })
+          .catch((aiErr) => {
+            console.warn('AI background enrichment skipped:', aiErr);
+          });
+      }
     } catch (err: any) {
       console.error('Error scanning Gmail:', err);
       setErrorMessage(
@@ -699,9 +822,17 @@ export default function Home() {
     new Set(senders.map((s) => s.domain).filter(Boolean))
   ).slice(0, 8);
 
-  const highPriorityList = senders.filter((s) => s.analysis?.unsubscribePriority === 'high');
+  const highPriorityList = senders.filter((s) => {
+    const analysis = s.analysis || classifySender(s);
+    const isJob = analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
+    return !isJob && analysis.unsubscribePriority === 'high';
+  });
   const highPriorityCount = highPriorityList.length;
-  const jobAlertsList = senders.filter((s) => s.analysis?.isJobRelated || s.analysis?.category?.toLowerCase().includes('job'));
+
+  const jobAlertsList = senders.filter((s) => {
+    const analysis = s.analysis || classifySender(s);
+    return analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
+  });
   const jobAlertsCount = jobAlertsList.length;
   const totalUnreadEmails = senders.reduce((acc, s) => acc + s.unreadCount, 0);
 

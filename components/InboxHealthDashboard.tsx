@@ -34,7 +34,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { GroupedSenderData } from './SenderCard';
+import { GroupedSenderData, AIAnalysisData } from './SenderCard';
+import { classifySender, isJobAlertSender } from '@/lib/classification';
 
 export interface InboxHealthDashboardProps {
   totalSenders: number;
@@ -100,9 +101,10 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
 
   const calculatedJobAlertsCount =
     jobAlertsCount ??
-    senders.filter(
-      (s) => s.analysis?.isJobRelated || s.analysis?.category?.toLowerCase().includes('job')
-    ).length;
+    senders.filter((s) => {
+      const analysis = s.analysis || classifySender(s);
+      return analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
+    }).length;
 
   // Category distribution calculation
   const processCategoryData = () => {
@@ -120,11 +122,13 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
     const categoryMap: Record<string, { emails: number; sendersCount: number; unread: number }> = {};
 
     senders.forEach((s) => {
-      const rawCategory = s.analysis?.category?.trim() || 'Newsletter';
+      const analysis = s.analysis || classifySender(s);
+      const isJob = analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
+      const rawCategory = analysis.category?.trim() || 'Newsletter';
       const lower = rawCategory.toLowerCase();
       let normCategory = 'Newsletters';
 
-      if (s.analysis?.isJobRelated || lower.includes('job') || lower.includes('career') || lower.includes('hiring') || lower.includes('recruit')) {
+      if (isJob || lower.includes('career') || lower.includes('hiring') || lower.includes('recruit')) {
         normCategory = 'Job Alerts & Careers';
       } else if (lower.includes('newsletter') || lower.includes('digest') || lower.includes('editorial')) {
         normCategory = 'Newsletters';

@@ -1,4 +1,5 @@
-import { GroupedSenderData } from '@/components/SenderCard';
+import { GroupedSenderData, AIAnalysisData } from '@/components/SenderCard';
+import { isJobAlertSender, classifySender } from './classification';
 
 /**
  * Calculates if a query string fuzzy matches a target text string.
@@ -55,6 +56,20 @@ export function filterSendersFuzzy(
   const cleanSearchQuery = query.trim();
 
   return senders.filter((s) => {
+    const analysis: AIAnalysisData = s.analysis || classifySender({
+      senderKey: s.senderKey,
+      fromName: s.fromName,
+      fromEmail: s.fromEmail,
+      domain: s.domain,
+      totalEmails: s.totalEmails,
+      unreadCount: s.unreadCount,
+      sampleSubject: s.sampleSubject,
+      sampleSnippet: s.sampleSnippet,
+      existingAnalysis: s.analysis,
+    });
+
+    const isJob = analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
+
     // 1. Custom Domain Filter Check
     if (cleanDomainQuery) {
       const senderDomain = (s.domain || '').toLowerCase();
@@ -67,35 +82,30 @@ export function filterSendersFuzzy(
       if (domainFilterMode === 'exclude' && domainMatches) return false;
     }
 
-    // 2. Priority Filter Check
-    if (priorityFilter === 'high' && s.analysis?.unsubscribePriority !== 'high') return false;
-    if (priorityFilter === 'medium' && s.analysis?.unsubscribePriority !== 'medium') return false;
-    if (priorityFilter === 'low' && s.analysis?.unsubscribePriority !== 'low') return false;
-    if (
-      priorityFilter === 'job_alerts' &&
-      !s.analysis?.isJobRelated &&
-      !s.analysis?.category?.toLowerCase().includes('job')
-    ) {
-      return false;
+    // 2. Priority Filter Check (Job Alerts are strictly low priority and excluded from high/medium)
+    if (priorityFilter === 'high') {
+      if (isJob) return false; // Job alerts are NEVER high priority
+      if (analysis.unsubscribePriority !== 'high') return false;
+    } else if (priorityFilter === 'medium') {
+      if (isJob) return false;
+      if (analysis.unsubscribePriority !== 'medium') return false;
+    } else if (priorityFilter === 'low') {
+      if (!isJob && analysis.unsubscribePriority !== 'low') return false;
+    } else if (priorityFilter === 'job_alerts') {
+      if (!isJob) return false;
     }
 
     // 3. Context / Use-Type Filter Check
     if (contextType && contextType !== 'all') {
-      const categoryLower = (s.analysis?.category || '').toLowerCase();
-      const summaryLower = (s.analysis?.summary || '').toLowerCase();
+      const categoryLower = (analysis.category || '').toLowerCase();
+      const summaryLower = (analysis.summary || '').toLowerCase();
       const emailLower = s.fromEmail.toLowerCase();
       const subjectLower = (s.sampleSubject || '').toLowerCase();
 
       if (contextType === 'job_alerts') {
-        const isJob =
-          s.analysis?.isJobRelated ||
-          categoryLower.includes('job') ||
-          categoryLower.includes('career') ||
-          summaryLower.includes('recruiter') ||
-          emailLower.includes('linkedin') ||
-          emailLower.includes('indeed');
         if (!isJob) return false;
       } else if (contextType === 'newsletters') {
+        if (isJob) return false;
         const isNewsletter =
           categoryLower.includes('newsletter') ||
           categoryLower.includes('digest') ||
@@ -104,6 +114,7 @@ export function filterSendersFuzzy(
           emailLower.includes('medium');
         if (!isNewsletter) return false;
       } else if (contextType === 'ecommerce') {
+        if (isJob) return false;
         const isEcom =
           categoryLower.includes('promo') ||
           categoryLower.includes('shop') ||
@@ -113,6 +124,7 @@ export function filterSendersFuzzy(
           subjectLower.includes('deal');
         if (!isEcom) return false;
       } else if (contextType === 'finance') {
+        if (isJob) return false;
         const isFinance =
           categoryLower.includes('receipt') ||
           categoryLower.includes('financial') ||

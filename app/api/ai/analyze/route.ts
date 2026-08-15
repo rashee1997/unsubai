@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+import { isJobAlertSender } from '@/lib/classification';
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -89,7 +90,37 @@ ${JSON.stringify(compactList, null, 2)}`;
     const parsedText = response.text || '{}';
     const jsonResult = JSON.parse(parsedText);
 
-    return NextResponse.json(jsonResult);
+    // Strict Post-Processing Safety Guarantee: Never allow job alerts to be marked as High or Medium priority
+    const originalSenderMap = new Map(compactList.map((s: any) => [s.senderKey, s]));
+
+    const sanitizedAnalysis = (jsonResult.sendersAnalysis || []).map((item: any) => {
+      const orig = originalSenderMap.get(item.senderKey) || {};
+      const isJob =
+        item.isJobRelated ||
+        item.category?.toLowerCase().includes('job') ||
+        item.category?.toLowerCase().includes('career') ||
+        item.summary?.toLowerCase().includes('job') ||
+        item.summary?.toLowerCase().includes('recruiter') ||
+        item.summary?.toLowerCase().includes('hiring') ||
+        (orig.fromEmail && isJobAlertSender(orig)) ||
+        (orig.senderKey && isJobAlertSender({ senderKey: orig.senderKey, fromName: orig.fromName, sampleSubject: orig.latestSubject, sampleSnippet: orig.snippet }));
+
+      if (isJob) {
+        return {
+          ...item,
+          isJobRelated: true,
+          isSensitive: true,
+          category: 'Job Alerts & Careers',
+          unsubscribePriority: 'low', // GUARANTEED LOW PRIORITY
+          recommendationScore: Math.min(item.recommendationScore || 15, 20),
+          safetyWarning: item.safetyWarning || 'Job Alert / Career Notification - AI protected to preserve job opportunities.',
+        };
+      }
+
+      return item;
+    });
+
+    return NextResponse.json({ sendersAnalysis: sanitizedAnalysis });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'AI Analysis failed' }, { status: 500 });
   }

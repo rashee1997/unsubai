@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { classifySender } from '@/lib/classification';
+import { AIAnalysisData } from '@/components/SenderCard';
 
 export interface EmailHeader {
   name: string;
@@ -39,6 +41,7 @@ export interface GroupedSender {
   unsubscribePostHeader: string | null;
   messageIds: string[];
   unreadMessageIds: string[];
+  analysis?: AIAnalysisData;
 }
 
 // Helper function to extract email and name from "Name <email@domain.com>"
@@ -330,7 +333,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const sendersList = Array.from(senderMap.values()).sort((a, b) => b.unreadCount - a.unreadCount || b.totalEmails - a.totalEmails);
+    const sendersList = Array.from(senderMap.values())
+      .map((sender) => ({
+        ...sender,
+        analysis: classifySender({
+          senderKey: sender.senderKey,
+          fromName: sender.fromName,
+          fromEmail: sender.fromEmail,
+          domain: sender.domain,
+          totalEmails: sender.totalEmails,
+          unreadCount: sender.unreadCount,
+          sampleSubject: sender.sampleSubject,
+          sampleSnippet: sender.sampleSnippet,
+        }),
+      }))
+      .sort((a, b) => b.unreadCount - a.unreadCount || b.totalEmails - a.totalEmails);
 
     return NextResponse.json({
       query: searchQuery,
