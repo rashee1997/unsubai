@@ -1,6 +1,6 @@
 {
   "name": "Unsub.AI",
-  "description": "Unsub.AI v1.0.0 - Intelligent Gmail newsletter scanner, unsubscribe link extractor, and inbox protector with Gemini AI.",
+  "description": "Full-featured user-friendly email client with anti-AI human cadence email generation, 3-pane triage, and 1-click unsubscribe protection.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

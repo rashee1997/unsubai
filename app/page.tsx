@@ -15,6 +15,7 @@ import { getStoredSettings, compileCombinedCustomInstructions, saveStoredSetting
 import { GeminiChatbot } from '@/components/GeminiChatbot';
 import { filterSendersFuzzy } from '@/lib/fuzzySearch';
 import { classifySender, isJobAlertSender } from '@/lib/classification';
+import { EmailClientView } from '@/components/EmailClientView';
 import { useToast } from '@/components/Toast';
 
 declare global {
@@ -287,6 +288,7 @@ const SAMPLE_SENDERS: GroupedSenderData[] = [
 
 export default function Home() {
   const { toast } = useToast();
+  const [activeView, setActiveView] = useState<'mail' | 'unsub'>('mail');
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string>(() => {
@@ -1068,9 +1070,17 @@ export default function Home() {
         onDisconnect={handleDisconnect}
         isScanning={isScanning}
         unsubscribedCount={unsubscribedSet.size}
+        activeView={activeView}
+        onViewChange={setActiveView}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {activeView === 'mail' ? (
+        <EmailClientView
+          token={accessToken}
+          onOpenUnsubscribeCenter={() => setActiveView('unsub')}
+        />
+      ) : (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Banner if not connected */}
         {!accessToken && (
           <div className="mb-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white p-6 sm:p-8 shadow-xl relative overflow-hidden transition-colors">
@@ -1540,6 +1550,7 @@ export default function Home() {
           </p>
         </footer>
       </main>
+      )}
 
       {/* Explicit Confirmation Step Modal */}
       <UnsubscribeConfirmModal
