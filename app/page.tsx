@@ -306,6 +306,11 @@ export default function Home() {
   const [appSettings, setAppSettings] = useState<AppSettings>(() => getStoredSettings());
 
   const handleChatbotUnsubscribe = async (senderKeys: string[], autoTrash: boolean) => {
+    senderKeys.forEach((k) => setUnsubscribedSet((prev) => new Set(prev).add(k)));
+    if (autoTrash) {
+      senderKeys.forEach((k) => setCleanedSet((prev) => new Set(prev).add(k)));
+    }
+
     const targets = senders.filter((s) => senderKeys.includes(s.senderKey) || senderKeys.includes(s.fromEmail));
     if (targets.length === 0) {
       const fallbacks: GroupedSenderData[] = senderKeys.map((k) => ({
@@ -1519,6 +1524,8 @@ export default function Home() {
       {/* Gemini Agentic Chatbot (Fixed in Bottom-Right Corner with Auto Trigger Help Notifications) */}
       <GeminiChatbot
         senders={senders}
+        unsubscribedSet={unsubscribedSet}
+        cleanedSet={cleanedSet}
         scanConfig={scanConfig}
         settings={appSettings}
         auditLogs={auditLogs}

@@ -1,9 +1,8 @@
-import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
+import { Type, FunctionDeclaration } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+import { getGeminiClient, generateContentWithFallback } from '@/lib/gemini';
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-// Define function declarations for Gemini Agent CRUD tools
+// Define enhanced function declarations for Gemini Agent tools
 const crudTools: FunctionDeclaration[] = [
   {
     name: 'search_senders',
@@ -24,6 +23,37 @@ const crudTools: FunctionDeclaration[] = [
     parameters: {
       type: Type.OBJECT,
       properties: {},
+    },
+  },
+  {
+    name: 'inspect_sender_samples',
+    description: 'Inspect sample email subjects, snippets, unread ratios, unsubscribe headers, and volume trends for one or more senders.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        senderKey: { type: Type.STRING, description: 'The sender email address or key to inspect in detail.' },
+      },
+      required: ['senderKey'],
+    },
+  },
+  {
+    name: 'simulate_cleanup_impact',
+    description: 'Simulate and calculate the projected impact (messages freed, storage MB estimate, job alert risk check) before running an unsubscribe or trash action.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        senderKeys: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: 'List of sender emails to simulate cleanup for.',
+        },
+        action: {
+          type: Type.STRING,
+          enum: ['unsubscribe', 'trash', 'unsubscribe_and_trash'],
+          description: 'The type of action to simulate.',
+        },
+      },
+      required: ['senderKeys', 'action'],
     },
   },
   {
@@ -141,7 +171,7 @@ const crudTools: FunctionDeclaration[] = [
 ];
 
 export async function POST(req: NextRequest) {
-  if (!apiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: 'GEMINI_API_KEY environment variable is missing on server.' }, { status: 500 });
   }
 
@@ -157,22 +187,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Messages array is required.' }, { status: 400 });
     }
 
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
+    const ai = getGeminiClient();
 
     // Build role-based system instruction
-    let roleDescription = 'You are the Gmail Smart Unsubscriber AI Assistant, an agentic chatbot equipped with real-time CRUD tools to help users scan, analyze, filter, unsubscribe from newsletters, and organize their Gmail inbox.';
+    let roleDescription = 'You are the Gmail Smart Unsubscriber Copilot, an agentic AI chatbot equipped with real-time inspection, simulation, and CRUD tools to help users scan, analyze, filter, unsubscribe from newsletters, and organize their Gmail inbox with safety guarantees.';
 
     if (systemRole === 'privacy_expert') {
-      roleDescription = 'You are the Gmail Privacy & Safety Audit Expert. You focus heavily on protecting sensitive emails, receipts, financial alerts, two-factor notices, and job opportunity alerts from accidental unsubscriptions. Always highlight safety warnings.';
+      roleDescription = 'You are the Gmail Privacy & Safety Audit Expert. You focus heavily on protecting sensitive emails, receipts, financial alerts, two-factor notices, and job opportunity alerts from accidental unsubscriptions. Always highlight safety warnings and check protected whitelists.';
     } else if (systemRole === 'strict_cleaner') {
-      roleDescription = 'You are the Aggressive Clutter Cleaner AI Agent. Your goal is to aggressively surface high-volume unopened newsletters, marketing spam, and abandoned promo subscriptions to free up inbox space quickly.';
+      roleDescription = 'You are the Aggressive Clutter Cleaner AI Agent. Your goal is to aggressively surface high-volume unopened newsletters, marketing spam, and abandoned promo subscriptions to free up inbox space quickly and recommend batch cleanup.';
     }
 
     const currentContextSummary = `
@@ -194,12 +217,13 @@ ${currentContextSummary}
 
 CORE RULES & AGENTIC BEHAVIOR:
 1. You have CRUD tools to inspect and act on the user's inbox subscriptions and rules.
-2. READ operations (search_senders, get_inbox_health, get_audit_logs) execute automatically to answer queries.
-3. WRITE / ACTION operations (unsubscribe_sender, trash_sender_emails, update_sender_priority, add_custom_filter_rule, add_to_protected_list, update_scan_configuration, trigger_inbox_scan) will trigger a Human-In-The-Loop (HITL) confirmation card in the user's chat window before execution.
-4. When calling write/delete tools, always provide a clear, user-friendly "reason" parameter so the user understands why the action is proposed.
-5. Never hallucinate fake email addresses or actions. Base actions on the provided app context.
-6. Always preserve Job Alerts and Career notifications unless the user explicitly orders you to unsubscribe from them.
-7. Be polite, concise, professional, and helpful. Use clear bullet points and markdown.`;
+2. READ & SIMULATION operations (search_senders, get_inbox_health, inspect_sender_samples, simulate_cleanup_impact, get_audit_logs) execute automatically to answer queries with precise facts and dry-run simulations.
+3. WRITE / ACTION operations (unsubscribe_sender, trash_sender_emails, update_sender_priority, add_custom_filter_rule, add_to_protected_list, update_scan_configuration, trigger_inbox_scan) will trigger an interactive Human-In-The-Loop (HITL) confirmation card in the user's chat window before execution.
+4. When proposing write/delete tools, always provide a clear, user-friendly "reason" parameter and explain the impact.
+5. If the user asks about the consequences or impact of cleaning senders, invoke 'simulate_cleanup_impact' or 'inspect_sender_samples' first before proposing the action.
+6. Never hallucinate fake email addresses or actions. Base actions on the provided app context.
+7. Always preserve Job Alerts and Career notifications unless the user explicitly orders you to unsubscribe from them.
+8. Be polite, concise, professional, and helpful. Format responses with clean Markdown bullet points and bold key numbers.`;
 
     // Convert client chat message history into Gemini content structure
     const formattedContents = messages.map((m: any) => {
@@ -210,26 +234,28 @@ CORE RULES & AGENTIC BEHAVIOR:
         };
       } else if (m.role === 'model' || m.role === 'assistant') {
         const parts: any[] = [];
-        if (m.content) {
-          parts.push({ text: m.content });
-        }
         if (m.functionCalls && Array.isArray(m.functionCalls)) {
           for (const call of m.functionCalls) {
             parts.push({ functionCall: call });
           }
+        } else if (m.content) {
+          parts.push({ text: m.content });
         }
         return {
           role: 'model',
-          parts: parts.length > 0 ? parts : [{ text: '' }],
+          parts: parts.length > 0 ? parts : [{ text: 'Processing your request.' }],
         };
       } else if (m.role === 'function' || m.role === 'tool') {
         return {
-          role: 'user',
+          role: 'tool',
           parts: [
             {
               functionResponse: {
                 name: m.name,
-                response: m.response || { result: 'ok' },
+                response:
+                  typeof m.response === 'object' && m.response !== null
+                    ? m.response
+                    : { result: m.response || 'ok' },
               },
             },
           ],
@@ -241,9 +267,8 @@ CORE RULES & AGENTIC BEHAVIOR:
       };
     });
 
-    // Call Gemini with tools using gemini-3.7-flash
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+    // Call Gemini with tools with automatic model fallback (gemini-3.7-flash -> gemini-3.6-flash -> gemini-3.5-flash-lite)
+    const { response, modelUsed } = await generateContentWithFallback(ai, {
       contents: formattedContents,
       config: {
         systemInstruction,
@@ -251,15 +276,18 @@ CORE RULES & AGENTIC BEHAVIOR:
       },
     });
 
+    console.info(`[Gemini Chat] Successfully generated response using model: ${modelUsed}`);
+
     const candidate = response.candidates?.[0];
     const textOutput = response.text || '';
     const functionCalls = candidate?.content?.parts
-      ?.filter((p) => p.functionCall)
-      ?.map((p) => p.functionCall);
+      ?.filter((p: any) => p.functionCall)
+      ?.map((p: any) => p.functionCall);
 
     return NextResponse.json({
       text: textOutput,
       functionCalls: functionCalls && functionCalls.length > 0 ? functionCalls : null,
+      modelUsed,
     });
   } catch (error: any) {
     console.error('Error in Gemini Chatbot route:', error);

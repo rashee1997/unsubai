@@ -1,14 +1,9 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { isJobAlertSender } from '@/lib/classification';
-
-const apiKey = process.env.GEMINI_API_KEY;
+import { getGeminiClient, generateContentWithFallback } from '@/lib/gemini';
 
 export async function POST(req: NextRequest) {
-  if (!apiKey) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY is not configured on server' }, { status: 500 });
-  }
-
   try {
     const { senders, customInstructions } = await req.json();
 
@@ -16,7 +11,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sendersAnalysis: [] });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = getGeminiClient();
 
     // Prepare clean summary for Gemini prompt
     const compactList = senders.map((s: any) => ({
@@ -56,8 +51,7 @@ Evaluate each sender and provide:
 Senders list:
 ${JSON.stringify(compactList, null, 2)}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+    const { response, modelUsed } = await generateContentWithFallback(ai, {
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -86,6 +80,8 @@ ${JSON.stringify(compactList, null, 2)}`;
         },
       },
     });
+
+    console.info(`[Gemini Analysis] Successfully analyzed senders using model: ${modelUsed}`);
 
     const parsedText = response.text || '{}';
     const jsonResult = JSON.parse(parsedText);
