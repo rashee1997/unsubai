@@ -38,6 +38,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex flex-col shrink-0">
               <div className="flex items-center space-x-1.5">
                 <span className="font-bold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight shrink-0">Unsub.AI</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200/80 dark:border-indigo-800/80 shrink-0">
+                  v1.0.0
+                </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400 hidden lg:block leading-none mt-0.5 truncate">Inbox Cleanup & Protection</p>
             </div>

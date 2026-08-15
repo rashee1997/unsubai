@@ -1,6 +1,6 @@
 {
-  "name": "Gmail Smart Unsubscriber",
-  "description": "Scan unopened and low-engagement emails in Gmail, detect recurring newsletters, extract unsubscribe links, and bulk-unsubscribe or clean up your inbox with AI insights.",
+  "name": "Unsub.AI",
+  "description": "Unsub.AI v1.0.0 - Intelligent Gmail newsletter scanner, unsubscribe link extractor, and inbox protector with Gemini AI.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1297,6 +1297,19 @@ export default function Home() {
             </p>
           </div>
         )}
+        {/* Unsub.AI v1.0.0 Footer */}
+        <footer className="pt-8 pb-12 border-t border-slate-200/80 dark:border-zinc-800/80 text-center text-xs text-slate-500 dark:text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-slate-700 dark:text-zinc-300">Unsub.AI</span>
+            <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-semibold border border-indigo-200/60 dark:border-indigo-800/60">
+              v1.0.0
+            </span>
+            <span>• Direct Client-Side Gmail OAuth &amp; Gemini AI</span>
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-zinc-500">
+            Private &amp; Secure • Credentials and tokens remain in your session
+          </p>
+        </footer>
       </main>
 
       {/* Explicit Confirmation Step Modal */}

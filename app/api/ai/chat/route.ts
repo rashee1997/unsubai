@@ -241,9 +241,9 @@ CORE RULES & AGENTIC BEHAVIOR:
       };
     });
 
-    // Call Gemini with tools using gemini-3.6-flash
+    // Call Gemini with tools using gemini-3.7-flash
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-3.7-flash',
       contents: formattedContents,
       config: {
         systemInstruction,

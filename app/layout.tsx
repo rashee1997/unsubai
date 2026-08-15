@@ -4,10 +4,10 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
-  title: 'Unsub AI - Smart Gmail Unsubscriber & Inbox Cleaner',
-  description: 'Connect Gmail to automatically scan unopened newsletters, extract unsubscribe links, analyze with Gemini AI, and bulk cleanup unwanted emails.',
+  title: 'Unsub.AI v1.0.0 - Smart Gmail Unsubscriber & Inbox Cleaner',
+  description: 'Unsub.AI v1.0.0: Connect Gmail to automatically scan unopened newsletters, extract unsubscribe links, analyze with Gemini AI, and bulk cleanup unwanted emails.',
   openGraph: {
-    title: 'Unsub AI - Smart Gmail Unsubscriber',
+    title: 'Unsub.AI v1.0.0 - Smart Gmail Unsubscriber',
     description: 'AI-powered newsletter scanner and bulk unsubscriber for Gmail.',
     type: 'website',
   },

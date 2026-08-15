@@ -706,6 +706,31 @@ export default function SettingsPage() {
                 </div>
               </div>
             </section>
+
+            {/* Application Information */}
+            <section className="glass-panel p-6 space-y-4 transition-all">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                About Unsub.AI
+              </h2>
+
+              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-zinc-900/50 border border-slate-200/80 dark:border-white/10 text-xs space-y-2.5 backdrop-blur-md">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 dark:text-zinc-400">Application:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">Unsub.AI</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 dark:text-zinc-400">Release Version:</span>
+                  <span className="font-mono font-semibold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 text-[11px]">
+                    v1.0.0
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 dark:text-zinc-400">AI Intelligence:</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200">Gemini 3.7 Flash</span>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </main>
