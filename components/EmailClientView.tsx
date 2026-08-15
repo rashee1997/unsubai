@@ -23,18 +23,31 @@ import {
   CheckCircle2,
   Filter,
   SlidersHorizontal,
+  ArrowLeft,
+  Menu,
+  X,
+  Folder,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { ComposeModal } from '@/components/ComposeModal';
 import { EmailPreviewModal } from '@/components/EmailPreviewModal';
+import { SafeEmailPreview } from '@/components/SafeEmailPreview';
 import { EmailMessageSummary } from '@/app/api/gmail/messages/route';
+import { EmailPreviewResponse } from '@/app/api/gmail/preview/route';
 import { useToast } from '@/components/Toast';
 
 interface EmailClientViewProps {
   token: string | null;
   onOpenUnsubscribeCenter: () => void;
+  onConnectGmail?: () => void;
 }
 
-export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenUnsubscribeCenter }) => {
+export const EmailClientView: React.FC<EmailClientViewProps> = ({
+  token,
+  onOpenUnsubscribeCenter,
+  onConnectGmail,
+}) => {
   const { toast } = useToast();
   const [currentFolder, setCurrentFolder] = useState<string>('INBOX');
   const [messages, setMessages] = useState<EmailMessageSummary[]>([]);
@@ -44,8 +57,16 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
   const [isLoading, setIsLoading] = useState(false);
   const [isLiveConnection, setIsLiveConnection] = useState(false);
 
-  // Modals & Composer
+  // Backend Discrete Page Pagination state
+  const [pageTokens, setPageTokens] = useState<string[]>(['']); // Token history stack: index 0 is Page 1 ('')
+  const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [isLoadingPage, setIsLoadingPage] = useState(false);
+  const [resultSizeEstimate, setResultSizeEstimate] = useState<number | null>(null);
+
+  // Modals & Mobile Nav
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isMobileFolderOpen, setIsMobileFolderOpen] = useState(false);
   const [composeInitialData, setComposeInitialData] = useState<{
     to?: string;
     subject?: string;
@@ -55,6 +76,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
 
   // Thread Reading details
   const [fullMessageContent, setFullMessageContent] = useState<string | null>(null);
+  const [emailPreviewData, setEmailPreviewData] = useState<EmailPreviewResponse | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   // AI Summary state for currently open message
@@ -70,6 +92,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
     setSelectedMessage(msg);
     setAiSummary(null);
     setQuickReplyText('');
+    setEmailPreviewData(null);
 
     // Mark read locally
     if (msg.isUnread) {
@@ -84,23 +107,31 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
       });
     }
 
-    // Fetch full body content
+    // Fetch full body content & headers
     setIsLoadingContent(true);
     try {
+      const fromName = msg.from.split('<')[0].replace(/"/g, '').trim() || msg.from;
+      const fromEmail = msg.from.match(/<([^>]+)>/)?.[1] || msg.from;
+
       const res = await fetch('/api/gmail/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: token ? `Bearer ${token}` : '',
         },
-        body: JSON.stringify({ messageId: msg.id }),
+        body: JSON.stringify({
+          messageId: msg.id,
+          fromName,
+          fromEmail,
+          subject: msg.subject,
+          snippet: msg.snippet,
+          date: msg.date,
+        }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setFullMessageContent(data.html || data.snippet || msg.snippet);
-      } else {
-        setFullMessageContent(msg.snippet);
-      }
+
+      const data: EmailPreviewResponse = await res.json();
+      setEmailPreviewData(data);
+      setFullMessageContent(data.htmlBody || data.textBody || msg.snippet);
     } catch {
       setFullMessageContent(msg.snippet);
     } finally {
@@ -108,36 +139,88 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
     }
   }, [token]);
 
-  // Fetch messages from API
-  const fetchMessages = React.useCallback(async (folder = currentFolder, query = searchQuery) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/gmail/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({ folder, q: query }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setMessages(data.messages || []);
-        setIsLiveConnection(data.isLive || false);
-        if (data.messages?.length > 0 && !selectedMessage) {
-          handleSelectMessage(data.messages[0]);
-        }
+  // Fetch discrete page of messages from API
+  const loadPage = React.useCallback(
+    async (
+      targetToken = '',
+      targetIndex = 0,
+      folder = currentFolder,
+      query = searchQuery
+    ) => {
+      setIsLoadingPage(true);
+      if (targetIndex === 0) {
+        setIsLoading(true);
+        setPageTokens(['']);
+        setNextPageToken(null);
       }
-    } catch (err: any) {
-      console.warn('Failed to load messages:', err?.message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentFolder, searchQuery, token, selectedMessage, handleSelectMessage]);
+
+      try {
+        const res = await fetch('/api/gmail/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({
+            folder,
+            q: query,
+            pageToken: targetToken,
+            maxResults: 20,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const fetched: EmailMessageSummary[] = data.messages || [];
+          setMessages(fetched); // Replace message list for discrete clean pagination!
+          setNextPageToken(data.nextPageToken || null);
+          setCurrentPageIndex(targetIndex);
+          if (typeof data.resultSizeEstimate === 'number') {
+            setResultSizeEstimate(data.resultSizeEstimate);
+          }
+          setIsLiveConnection(data.isLive || false);
+          if (fetched.length > 0) {
+            handleSelectMessage(fetched[0]);
+          } else {
+            setSelectedMessage(null);
+          }
+        }
+      } catch (err: any) {
+        console.warn('Failed to load page:', err?.message);
+      } finally {
+        setIsLoadingPage(false);
+        setIsLoading(false);
+      }
+    },
+    [currentFolder, searchQuery, token, handleSelectMessage]
+  );
+
+  const fetchMessages = React.useCallback(
+    (folder = currentFolder, query = searchQuery) => {
+      loadPage('', 0, folder, query);
+    },
+    [currentFolder, searchQuery, loadPage]
+  );
+
+  const handleNextPage = React.useCallback(() => {
+    if (!nextPageToken || isLoadingPage || isLoading) return;
+    const nextIndex = currentPageIndex + 1;
+    const updatedTokens = [...pageTokens];
+    updatedTokens[nextIndex] = nextPageToken;
+    setPageTokens(updatedTokens);
+    loadPage(nextPageToken, nextIndex);
+  }, [nextPageToken, isLoadingPage, isLoading, currentPageIndex, pageTokens, loadPage]);
+
+  const handlePrevPage = React.useCallback(() => {
+    if (currentPageIndex <= 0 || isLoadingPage || isLoading) return;
+    const prevIndex = currentPageIndex - 1;
+    const prevToken = pageTokens[prevIndex] || '';
+    loadPage(prevToken, prevIndex);
+  }, [currentPageIndex, isLoadingPage, isLoading, pageTokens, loadPage]);
 
   useEffect(() => {
-    let ignore = false;
-    async function load() {
+    let isCancelled = false;
+    async function initLoad() {
+      setIsLoadingPage(true);
       setIsLoading(true);
       try {
         const res = await fetch('/api/gmail/messages', {
@@ -146,25 +229,42 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
             'Content-Type': 'application/json',
             Authorization: token ? `Bearer ${token}` : '',
           },
-          body: JSON.stringify({ folder: currentFolder, q: searchQuery }),
+          body: JSON.stringify({
+            folder: currentFolder,
+            q: searchQuery,
+            pageToken: '',
+            maxResults: 20,
+          }),
         });
         const data = await res.json();
-        if (!ignore && data.success) {
-          setMessages(data.messages || []);
+        if (!isCancelled && data.success) {
+          const fetched: EmailMessageSummary[] = data.messages || [];
+          setMessages(fetched);
+          setPageTokens(['']);
+          setCurrentPageIndex(0);
+          setNextPageToken(data.nextPageToken || null);
+          if (typeof data.resultSizeEstimate === 'number') {
+            setResultSizeEstimate(data.resultSizeEstimate);
+          }
           setIsLiveConnection(data.isLive || false);
-          if (data.messages?.length > 0) {
-            handleSelectMessage(data.messages[0]);
+          if (fetched.length > 0) {
+            handleSelectMessage(fetched[0]);
+          } else {
+            setSelectedMessage(null);
           }
         }
       } catch (err: any) {
-        console.warn('Failed to load messages:', err?.message);
+        console.warn('Failed to initial load page:', err?.message);
       } finally {
-        if (!ignore) setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoadingPage(false);
+          setIsLoading(false);
+        }
       }
     }
-    load();
+    initLoad();
     return () => {
-      ignore = true;
+      isCancelled = true;
     };
   }, [currentFolder, searchQuery, token, handleSelectMessage]);
 
@@ -354,13 +454,142 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
     }
   };
 
+  if (!token) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-[#070709] min-h-[calc(100vh-4rem)]">
+        <div className="max-w-md w-full bg-white dark:bg-[#0c0c0e] rounded-3xl p-8 border border-slate-200/80 dark:border-white/10 shadow-2xl text-center flex flex-col items-center gap-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-indigo-700 flex items-center justify-center text-white shadow-xl shadow-indigo-600/30">
+            <Mail className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Connect Your Gmail Account
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+              Authenticate via Google OAuth to load your real-time Gmail inbox, read email threads, compose responses with AI assist, and execute 1-click subscription cleanups.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onConnectGmail}
+            className="w-full py-3.5 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-3 transition-all cursor-pointer active:scale-98"
+          >
+            <svg className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+            </svg>
+            <span className="text-white font-bold">Connect with Google Gmail</span>
+          </button>
+
+          <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-center space-x-2 text-[11px] text-slate-400 dark:text-zinc-500">
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>100% Client-Side OAuth • Zero Data Retention</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-100 dark:bg-[#070709]">
-      {/* 3-Pane Frame */}
+    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-100 dark:bg-[#070709] relative">
+      
+      {/* Mobile Folder Drawer Backdrop & Sheet */}
+      {isMobileFolderOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm lg:hidden flex">
+          <div className="w-72 max-w-[80vw] bg-white dark:bg-[#0c0c0e] h-full flex flex-col justify-between p-4 shadow-2xl">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3">
+                <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center space-x-2">
+                  <Folder className="w-4 h-4 text-indigo-500" />
+                  <span>Mailboxes</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFolderOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Compose Button in Mobile Drawer */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileFolderOpen(false);
+                  setComposeInitialData({});
+                  setIsComposeOpen(true);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-2 shadow-md"
+              >
+                <PenSquare className="w-4 h-4" />
+                <span>Compose Email</span>
+              </button>
+
+              {/* Folder list */}
+              <div className="flex flex-col space-y-1">
+                {[
+                  { id: 'INBOX', label: 'Inbox', icon: Inbox, count: messages.filter((m) => m.isUnread).length },
+                  { id: 'STARRED', label: 'Starred', icon: Star },
+                  { id: 'UNREAD', label: 'Unread Only', icon: Mail },
+                  { id: 'PROMOTIONS', label: 'Promotions', icon: Tag },
+                  { id: 'SENT', label: 'Sent', icon: Send },
+                  { id: 'TRASH', label: 'Trash', icon: Trash2 },
+                ].map((folder) => {
+                  const Icon = folder.icon;
+                  const isActive = currentFolder === folder.id;
+                  return (
+                    <button
+                      key={folder.id}
+                      onClick={() => {
+                        setCurrentFolder(folder.id);
+                        setIsMobileFolderOpen(false);
+                      }}
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                        isActive
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+                          : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                        <span>{folder.label}</span>
+                      </div>
+                      {typeof folder.count === 'number' && folder.count > 0 && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-600 text-white">
+                          {folder.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setIsMobileFolderOpen(false);
+                onOpenUnsubscribeCenter();
+              }}
+              className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40"
+            >
+              <ShieldCheck className="w-4 h-4 text-rose-500" />
+              <span>Unsubscribe Center</span>
+            </button>
+          </div>
+          <div className="flex-1" onClick={() => setIsMobileFolderOpen(false)} />
+        </div>
+      )}
+
+      {/* 3-Pane Adaptive Frame */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* PANE 1: Navigation & Folders */}
-        <aside className="w-56 shrink-0 bg-white/80 dark:bg-[#0c0c0e]/90 border-r border-slate-200/80 dark:border-white/10 flex flex-col justify-between p-3 select-none">
+        {/* PANE 1: Desktop Navigation & Folders */}
+        <aside className="hidden lg:flex lg:w-52 xl:w-60 shrink-0 bg-white/80 dark:bg-[#0c0c0e]/90 border-r border-slate-200/80 dark:border-white/10 flex-col justify-between p-3 select-none">
           <div className="flex flex-col gap-4">
             {/* Primary Compose Button */}
             <button
@@ -431,11 +660,24 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
           </div>
         </aside>
 
-        {/* PANE 2: Message Stream List */}
-        <section className="w-80 md:w-96 shrink-0 bg-white dark:bg-[#09090b] border-r border-slate-200/80 dark:border-white/10 flex flex-col">
-          {/* Stream Search Bar */}
-          <div className="p-3 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
-            <div className="relative flex-1">
+        {/* PANE 2: Message Stream List (Fluid & Adaptive for Mobile/Tablet) */}
+        <section
+          className={`bg-white dark:bg-[#09090b] border-r border-slate-200/80 dark:border-white/10 flex flex-col ${
+            selectedMessage ? 'hidden md:flex md:w-72 lg:w-80 xl:w-96 shrink-0' : 'w-full md:w-72 lg:w-80 xl:w-96 shrink-0'
+          }`}
+        >
+          {/* Stream Search Bar & Mobile Folder Toggle */}
+          <div className="p-2.5 sm:p-3 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMobileFolderOpen(true)}
+              className="lg:hidden p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white"
+              title="Open Folders"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
+            <div className="relative flex-1 min-w-0">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -446,13 +688,31 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
                 className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-900 text-xs text-slate-900 dark:text-white placeholder-slate-400 border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
               />
             </div>
+            
             <button
               onClick={() => fetchMessages(currentFolder, searchQuery)}
               title="Refresh Inbox"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
+          </div>
+
+          {/* Quick Folder Horizontal Scroll Pills on Mobile/Tablet (< lg) */}
+          <div className="lg:hidden px-3 py-2 bg-slate-50/80 dark:bg-zinc-900/40 border-b border-slate-200/60 dark:border-white/5 flex items-center space-x-1.5 overflow-x-auto scrollbar-none text-xs">
+            {['INBOX', 'STARRED', 'UNREAD', 'PROMOTIONS', 'SENT'].map((f) => (
+              <button
+                key={f}
+                onClick={() => setCurrentFolder(f)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                  currentFolder === f
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700'
+                }`}
+              >
+                {f.charAt(0) + f.slice(1).toLowerCase()}
+              </button>
+            ))}
           </div>
 
           {/* Email Items List */}
@@ -537,37 +797,84 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
               })
             )}
           </div>
+
+          {/* Discrete Page-by-Page Navigation Footer */}
+          <div className="p-2.5 sm:p-3 bg-slate-50/90 dark:bg-[#0c0c0e]/90 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handlePrevPage}
+              disabled={currentPageIndex === 0 || isLoadingPage || isLoading}
+              className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700 disabled:opacity-40 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Prev</span>
+            </button>
+
+            <div className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+              <span>Page {currentPageIndex + 1}</span>
+              {isLoadingPage && (
+                <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextPage}
+              disabled={!nextPageToken || isLoadingPage || isLoading}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-40 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5 text-amber-300" />
+            </button>
+          </div>
         </section>
 
-        {/* PANE 3: Reading, AI Copilot, & Action Canvas */}
-        <main className="flex-1 bg-white dark:bg-[#070709] flex flex-col overflow-hidden">
+        {/* PANE 3: Reading, AI Copilot, & Action Canvas (Strictly Bounded Height) */}
+        <main
+          className={`flex-1 bg-white dark:bg-[#070709] flex flex-col h-full max-h-full overflow-hidden min-h-0 min-w-0 ${
+            selectedMessage ? 'flex w-full min-w-0' : 'hidden md:flex min-w-0'
+          }`}
+        >
           {selectedMessage ? (
-            <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <div className="flex-1 flex flex-col h-full max-h-full overflow-hidden min-h-0">
               
-              {/* Reading Header Bar */}
-              <div className="px-6 py-4 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between bg-white/70 dark:bg-[#09090b]/80 backdrop-blur-md shrink-0">
-                <div className="flex flex-col min-w-0 pr-4">
-                  <h1 className="text-base font-bold text-slate-900 dark:text-white truncate">
-                    {selectedMessage.subject}
-                  </h1>
-                  <div className="flex items-center space-x-2 mt-0.5 text-xs text-slate-500 dark:text-zinc-400">
-                    <span className="font-medium text-slate-700 dark:text-zinc-300">
-                      From: {selectedMessage.from}
-                    </span>
-                    <span>•</span>
-                    <span>{selectedMessage.date}</span>
+              {/* Reading Header Bar with Mobile Back Button */}
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 bg-white/70 dark:bg-[#09090b]/80 backdrop-blur-md shrink-0">
+                <div className="flex items-center space-x-2 min-w-0 flex-1">
+                  {/* Mobile Back Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMessage(null)}
+                    className="md:hidden p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 shrink-0"
+                    title="Back to inbox list"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                      {selectedMessage.subject}
+                    </h1>
+                    <div className="flex items-center space-x-2 mt-0.5 text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 truncate">
+                      <span className="font-medium text-slate-700 dark:text-zinc-300 truncate">
+                        {selectedMessage.from}
+                      </span>
+                      <span>•</span>
+                      <span className="shrink-0">{selectedMessage.date}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Quick actions (Archive, Trash, Star, 1-Click Unsub) */}
-                <div className="flex items-center space-x-2 shrink-0">
+                {/* Quick actions */}
+                <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
                   {selectedMessage.unsubscribeHeader?.hasHeader && (
                     <button
                       onClick={handle1ClickUnsubscribe}
-                      className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold border border-rose-200/80 dark:border-rose-900/40 flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                      className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold border border-rose-200/80 dark:border-rose-900/40 flex items-center space-x-1.5 cursor-pointer shadow-2xs"
                     >
                       <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                      <span>1-Click Unsubscribe</span>
+                      <span className="hidden sm:inline">1-Click Unsubscribe</span>
+                      <span className="sm:hidden">Unsub</span>
                     </button>
                   )}
 
@@ -590,9 +897,9 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
               </div>
 
               {/* AI Copilot & Summary strip */}
-              <div className="px-6 py-2.5 bg-slate-50/80 dark:bg-zinc-900/30 border-b border-slate-200/60 dark:border-white/5 flex items-center justify-between gap-3 shrink-0">
+              <div className="px-4 sm:px-6 py-2 bg-slate-50/80 dark:bg-zinc-900/30 border-b border-slate-200/60 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center space-x-1.5">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center space-x-1">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
                     <span>AI Copilot:</span>
                   </span>
@@ -601,19 +908,19 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
                     disabled={isSummarizing}
                     className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
                   >
-                    {isSummarizing ? 'Analyzing...' : 'Summarize Thread (2 Bullets)'}
+                    {isSummarizing ? 'Analyzing...' : 'Summarize Thread'}
                   </button>
                 </div>
 
                 {/* Anti-AI Instant Reply Triggers */}
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-[11px] text-slate-400 dark:text-zinc-500">Draft Human Reply:</span>
+                <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none py-0.5">
+                  <span className="text-[10px] text-slate-400 dark:text-zinc-500 shrink-0 mr-1 hidden sm:inline">Tone:</span>
                   {(['direct', 'warm', 'casual', 'polite_decline'] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() => handleGenerateAiReply(t)}
                       disabled={isAiDraftingReply}
-                      className="px-2 py-0.8 rounded-md bg-white dark:bg-zinc-800 text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-zinc-700 shadow-2xs cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 text-[10px] sm:text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-zinc-700 shadow-2xs cursor-pointer whitespace-nowrap"
                     >
                       {t === 'direct' ? 'Direct' : t === 'warm' ? 'Warm' : t === 'casual' ? 'Casual' : 'Decline'}
                     </button>
@@ -623,39 +930,27 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
 
               {/* AI Summary Banner (if active) */}
               {aiSummary && (
-                <div className="px-6 py-3 bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-900 dark:text-indigo-200 flex items-start space-x-2">
+                <div className="px-4 sm:px-6 py-3 bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-900 dark:text-indigo-200 flex items-start space-x-2">
                   <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
                   <div className="whitespace-pre-line leading-relaxed font-sans">{aiSummary}</div>
                 </div>
               )}
 
-              {/* Email Content Body Pane */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {isLoadingContent ? (
-                  <div className="flex items-center justify-center h-48 text-slate-400">
-                    <RefreshCw className="w-6 h-6 animate-spin" />
-                  </div>
-                ) : (
-                  <div
-                    className="prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-zinc-200"
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        fullMessageContent && fullMessageContent.includes('<')
-                          ? fullMessageContent
-                          : `<div style="white-space: pre-wrap; font-family: inherit; line-height: 1.6;">${
-                              fullMessageContent || selectedMessage.snippet
-                            }</div>`,
-                    }}
-                  />
-                )}
+              {/* Email Content Body Pane with Sandboxed Rich HTML Preview */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <SafeEmailPreview
+                  emailData={emailPreviewData}
+                  rawSnippet={selectedMessage.snippet}
+                  isLoading={isLoadingContent}
+                />
               </div>
 
               {/* Inline Quick Reply Box */}
-              <div className="p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-[#0a0a0c] shrink-0 flex flex-col gap-2">
+              <div className="p-3 sm:p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-[#0a0a0c] shrink-0 flex flex-col gap-2">
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                  <div className="flex items-center space-x-1.5">
-                    <Reply className="w-3.5 h-3.5" />
-                    <span>Quick Reply to {selectedMessage.from.split('<')[0].trim()}</span>
+                  <div className="flex items-center space-x-1.5 truncate">
+                    <Reply className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Quick Reply to {selectedMessage.from.split('<')[0].trim()}</span>
                   </div>
                   <button
                     onClick={() => {
@@ -669,9 +964,9 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
                       });
                       setIsComposeOpen(true);
                     }}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer"
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer shrink-0 ml-2"
                   >
-                    Open Full Composer
+                    Full Composer
                   </button>
                 </div>
 
@@ -679,15 +974,15 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
                   <textarea
                     value={quickReplyText}
                     onChange={(e) => setQuickReplyText(e.target.value)}
-                    placeholder="Type a human reply (or click a tone button above)..."
+                    placeholder="Type a human reply..."
                     rows={2}
-                    className="flex-1 p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
+                    className="flex-1 p-2 sm:p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
                   />
                   <button
                     type="button"
                     onClick={handleSendQuickReply}
                     disabled={isQuickReplying || !quickReplyText.trim()}
-                    className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all cursor-pointer shrink-0"
+                    className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all cursor-pointer shrink-0"
                   >
                     {isQuickReplying ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -711,6 +1006,19 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({ token, onOpenU
           )}
         </main>
       </div>
+
+      {/* Floating Action Button for Mobile Compose */}
+      <button
+        type="button"
+        onClick={() => {
+          setComposeInitialData({});
+          setIsComposeOpen(true);
+        }}
+        className="md:hidden fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-600/40 flex items-center justify-center active:scale-90 transition-transform cursor-pointer"
+        title="Compose New Email"
+      >
+        <PenSquare className="w-5 h-5" />
+      </button>
 
       {/* Floating Full Composer Modal */}
       <ComposeModal

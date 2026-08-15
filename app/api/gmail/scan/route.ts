@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
     const mode = body.mode || 'unopened'; // 'unopened', 'all_subscriptions', 'untouched_promos', 'custom_query'
     const maxScanResults = Math.min(Number(body.maxResults) || 60, 150);
     const customQuery = typeof body.customQuery === 'string' ? body.customQuery.trim() : '';
+    const pageToken = typeof body.pageToken === 'string' ? body.pageToken.trim() : '';
 
     // Build primary Gmail search query
     let queryParts: string[] = [];
@@ -172,8 +173,11 @@ export async function POST(req: NextRequest) {
 
     let searchQuery = queryParts.join(' ');
 
-    // 1. Fetch message list IDs from Gmail API
+    // 1. Fetch message list IDs from Gmail API with optional pageToken
     let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(searchQuery)}&maxResults=${maxScanResults}`;
+    if (pageToken) {
+      listUrl += `&pageToken=${encodeURIComponent(pageToken)}`;
+    }
     let listRes = await fetch(listUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -425,6 +429,8 @@ export async function POST(req: NextRequest) {
       totalMessagesScanned: parsedMessages.length,
       totalSendersFound: sendersList.length,
       senders: sendersList,
+      nextPageToken: listData.nextPageToken || null,
+      resultSizeEstimate: listData.resultSizeEstimate || parsedMessages.length,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Error executing Gmail scan' }, { status: 500 });

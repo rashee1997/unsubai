@@ -278,7 +278,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                     <iframe
                       title="Full Email Preview"
                       srcDoc={`
-                        <!質html>
+                        <!DOCTYPE html>
                         <html>
                           <head>
                             <meta charset="utf-8"/>

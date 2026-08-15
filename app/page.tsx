@@ -24,273 +24,24 @@ declare global {
   }
 }
 
-// Sample fallback data for immediate preview / demo testing
-const SAMPLE_SENDERS: GroupedSenderData[] = [
-  {
-    senderKey: 'promotions@shopdeal.com',
-    fromName: 'ShopDeal Weekly Flash',
-    fromEmail: 'promotions@shopdeal.com',
-    domain: 'shopdeal.com',
-    totalEmails: 18,
-    unreadCount: 16,
-    latestDate: 'Yesterday',
-    latestTimestamp: Date.now() - 86400000,
-    sampleSubject: '⚡ 70% OFF Flash Sale Ends Tonight!',
-    sampleSnippet: 'Claim your exclusive promo code DEAL70 on clothing, accessories, and home tech. Unsubscribe link at footer.',
-    unsubscribeUrl: 'https://shopdeal.com/unsubscribe?user=demo',
-    unsubscribeMailto: 'mailto:unsubscribe@shopdeal.com?subject=Unsubscribe',
-    unsubscribePostHeader: 'List-Unsubscribe=One-Click',
-    messageIds: ['demo-1', 'demo-2', 'demo-3'],
-    unreadMessageIds: ['demo-1', 'demo-2'],
-    frequencyHistory: [1, 3, 6, 8],
-    frequencyTrend: {
-      direction: 'increasing',
-      percentChange: 250,
-      label: 'Volume Increasing (+250% in last 30d)',
-      badgeLabel: '+250% (Rising)',
-      sparkline: [1, 3, 6, 8],
-      recentCount: 14,
-      olderCount: 4,
-      breakdownLabels: ['30-23d ago: 1', '22-15d ago: 3', '14-8d ago: 6', 'Last 7d: 8'],
-    },
-    analysis: {
-      senderKey: 'promotions@shopdeal.com',
-      unsubscribePriority: 'high',
-      recommendationScore: 96,
-      category: 'E-Commerce Deals',
-      summary: 'High volume marketing promo emails with 16 unopened messages in past 30 days.',
-      isSensitive: false,
-    },
-  },
-  {
-    senderKey: 'news@techdigestdaily.io',
-    fromName: 'Tech Digest Daily',
-    fromEmail: 'news@techdigestdaily.io',
-    domain: 'techdigestdaily.io',
-    totalEmails: 12,
-    unreadCount: 10,
-    latestDate: '2 days ago',
-    latestTimestamp: Date.now() - 172800000,
-    sampleSubject: 'Top 10 AI Framework Trends for 2026',
-    sampleSnippet: 'Here is your daily round-up of tech news, startup funding, and developer tools. Click to manage preferences.',
-    unsubscribeUrl: 'https://techdigestdaily.io/unsub',
-    unsubscribeMailto: null,
-    unsubscribePostHeader: null,
-    messageIds: ['demo-4', 'demo-5'],
-    unreadMessageIds: ['demo-4'],
-    frequencyHistory: [2, 3, 3, 4],
-    frequencyTrend: {
-      direction: 'increasing',
-      percentChange: 40,
-      label: 'Volume Increasing (+40% in last 30d)',
-      badgeLabel: '+40% (Rising)',
-      sparkline: [2, 3, 3, 4],
-      recentCount: 7,
-      olderCount: 5,
-      breakdownLabels: ['30-23d ago: 2', '22-15d ago: 3', '14-8d ago: 3', 'Last 7d: 4'],
-    },
-    analysis: {
-      senderKey: 'news@techdigestdaily.io',
-      unsubscribePriority: 'high',
-      recommendationScore: 91,
-      category: 'Tech Digest',
-      summary: 'Daily newsletter with low open rates (10 unopened emails). Recommended to unsubscribe.',
-      isSensitive: false,
-    },
-  },
-  {
-    senderKey: 'jobalerts-noreply@linkedin.com',
-    fromName: 'LinkedIn Job Alerts',
-    fromEmail: 'jobalerts-noreply@linkedin.com',
-    domain: 'linkedin.com',
-    totalEmails: 14,
-    unreadCount: 8,
-    latestDate: '3 hours ago',
-    latestTimestamp: Date.now() - 10800000,
-    sampleSubject: '12 new Senior Full Stack Engineer positions in San Francisco',
-    sampleSnippet: 'Recommended jobs matching your profile: Senior Full Stack Engineer at Anthropic, AI Engineer at Google, Tech Lead at Stripe.',
-    unsubscribeUrl: 'https://linkedin.com/e/v2/unsubscribe',
-    unsubscribeMailto: null,
-    unsubscribePostHeader: null,
-    messageIds: ['demo-7', 'demo-8'],
-    unreadMessageIds: ['demo-7'],
-    frequencyHistory: [3, 4, 4, 3],
-    frequencyTrend: {
-      direction: 'stable',
-      percentChange: 0,
-      label: 'Steady volume over 30 days',
-      badgeLabel: 'Steady',
-      sparkline: [3, 4, 4, 3],
-      recentCount: 7,
-      olderCount: 7,
-      breakdownLabels: ['30-23d ago: 3', '22-15d ago: 4', '14-8d ago: 4', 'Last 7d: 3'],
-    },
-    analysis: {
-      senderKey: 'jobalerts-noreply@linkedin.com',
-      unsubscribePriority: 'low',
-      recommendationScore: 15,
-      category: 'Job Alerts & Careers',
-      summary: 'Recruitment alert with engineering job openings matching your profile.',
-      safetyWarning: 'Job Alert / Career Notification - AI filtered and preserved to protect job opportunities.',
-      isSensitive: true,
-      isJobRelated: true,
-    },
-  },
-  {
-    senderKey: 'alert@indeed.com',
-    fromName: 'Indeed Recommended Jobs',
-    fromEmail: 'alert@indeed.com',
-    domain: 'indeed.com',
-    totalEmails: 9,
-    unreadCount: 5,
-    latestDate: 'Yesterday',
-    latestTimestamp: Date.now() - 90000000,
-    sampleSubject: 'New Lead React / Node.js Developer openings near you',
-    sampleSnippet: 'Matching roles for Lead Developer ($180k - $220k). View job specifications and apply in 1-click.',
-    unsubscribeUrl: 'https://indeed.com/account/alerts',
-    unsubscribeMailto: null,
-    unsubscribePostHeader: null,
-    messageIds: ['demo-9', 'demo-10'],
-    unreadMessageIds: ['demo-9'],
-    frequencyHistory: [2, 3, 2, 2],
-    frequencyTrend: {
-      direction: 'decreasing',
-      percentChange: 20,
-      label: 'Volume Decreasing (-20% in last 30d)',
-      badgeLabel: '-20% (Dropping)',
-      sparkline: [2, 3, 2, 2],
-      recentCount: 4,
-      olderCount: 5,
-      breakdownLabels: ['30-23d ago: 2', '22-15d ago: 3', '14-8d ago: 2', 'Last 7d: 2'],
-    },
-    analysis: {
-      senderKey: 'alert@indeed.com',
-      unsubscribePriority: 'low',
-      recommendationScore: 18,
-      category: 'Job Alerts & Careers',
-      summary: 'Job alert digest for Lead React/Node.js Developer openings.',
-      safetyWarning: 'Job Alert / Career Notification - AI filtered and preserved to protect job opportunities.',
-      isSensitive: true,
-      isJobRelated: true,
-    },
-  },
-  {
-    senderKey: 'no-reply@flightbookingapp.com',
-    fromName: 'SkyFly Itineraries',
-    fromEmail: 'no-reply@flightbookingapp.com',
-    domain: 'flightbookingapp.com',
-    totalEmails: 4,
-    unreadCount: 1,
-    latestDate: '4 days ago',
-    latestTimestamp: Date.now() - 345600000,
-    sampleSubject: 'Your Flight E-Ticket Confirmation & Boarding Pass',
-    sampleSnippet: 'Flight SF902 to SF. Booking Reference #XYZ987. Please keep this email for your records.',
-    unsubscribeUrl: 'https://flightbookingapp.com/notif-settings',
-    unsubscribeMailto: null,
-    unsubscribePostHeader: null,
-    messageIds: ['demo-6'],
-    unreadMessageIds: ['demo-6'],
-    frequencyHistory: [3, 1, 0, 0],
-    frequencyTrend: {
-      direction: 'decreasing',
-      percentChange: 100,
-      label: 'Volume Decreasing (-100% in last 30d)',
-      badgeLabel: '-100% (Dropping)',
-      sparkline: [3, 1, 0, 0],
-      recentCount: 0,
-      olderCount: 4,
-      breakdownLabels: ['30-23d ago: 3', '22-15d ago: 1', '14-8d ago: 0', 'Last 7d: 0'],
-    },
-    analysis: {
-      senderKey: 'no-reply@flightbookingapp.com',
-      unsubscribePriority: 'low',
-      recommendationScore: 25,
-      category: 'Travel & Receipts',
-      summary: 'Contains actual flight tickets and booking confirmations. Caution advised.',
-      safetyWarning: 'This sender sends flight tickets & itinerary receipts. Unsubscribing may block travel updates.',
-      isSensitive: true,
-      isJobRelated: false,
-    },
-  },
-  {
-    senderKey: 'deals@gadgetvaultweekly.com',
-    fromName: 'GadgetVault Old Promotions',
-    fromEmail: 'deals@gadgetvaultweekly.com',
-    domain: 'gadgetvaultweekly.com',
-    totalEmails: 15,
-    unreadCount: 15,
-    latestDate: '110 days ago',
-    latestTimestamp: Date.now() - 110 * 86400000,
-    sampleSubject: 'Special clearance discount on wireless gear & smart accessories',
-    sampleSnippet: 'Final sale liquidation event on tech gear and audio headphones. Unsubscribe at preferences page.',
-    unsubscribeUrl: 'https://gadgetvaultweekly.com/unsubscribe?user=demo',
-    unsubscribeMailto: 'mailto:unsub@gadgetvaultweekly.com?subject=Unsubscribe',
-    unsubscribePostHeader: 'List-Unsubscribe=One-Click',
-    messageIds: ['demo-stale-1', 'demo-stale-2'],
-    unreadMessageIds: ['demo-stale-1', 'demo-stale-2'],
-    frequencyHistory: [4, 4, 3, 4],
-    frequencyTrend: {
-      direction: 'decreasing',
-      percentChange: 25,
-      label: 'Volume Inactive (No opens in 110d)',
-      badgeLabel: 'Stale (>90d)',
-      sparkline: [4, 4, 3, 4],
-      recentCount: 0,
-      olderCount: 15,
-      breakdownLabels: ['110d ago: 4', '100d ago: 4', '95d ago: 3', '90d ago: 4'],
-    },
-    analysis: {
-      senderKey: 'deals@gadgetvaultweekly.com',
-      unsubscribePriority: 'high',
-      recommendationScore: 98,
-      category: 'E-Commerce & Promos',
-      summary: 'Stale subscription with 15 emails and 0 opens in over 110 days. Recommended for one-click unsubscribe.',
-      isSensitive: false,
-    },
-  },
-  {
-    senderKey: 'digest@dailycodenewsletter.net',
-    fromName: 'Daily Code Digest Archive',
-    fromEmail: 'digest@dailycodenewsletter.net',
-    domain: 'dailycodenewsletter.net',
-    totalEmails: 11,
-    unreadCount: 11,
-    latestDate: '95 days ago',
-    latestTimestamp: Date.now() - 95 * 86400000,
-    sampleSubject: 'Tech stack round-up and cloud architecture news archive',
-    sampleSnippet: 'Weekly round-up digest on backend scalability and framework updates. You can manage your subscription settings at any time.',
-    unsubscribeUrl: 'https://dailycodenewsletter.net/unsub?user=demo',
-    unsubscribeMailto: null,
-    unsubscribePostHeader: null,
-    messageIds: ['demo-stale-3'],
-    unreadMessageIds: ['demo-stale-3'],
-    frequencyHistory: [3, 3, 3, 2],
-    frequencyTrend: {
-      direction: 'decreasing',
-      percentChange: 30,
-      label: 'Volume Inactive (No opens in 95d)',
-      badgeLabel: 'Stale (>90d)',
-      sparkline: [3, 3, 3, 2],
-      recentCount: 0,
-      olderCount: 11,
-      breakdownLabels: ['95d ago: 3', '90d ago: 3', '85d ago: 3', '80d ago: 2'],
-    },
-    analysis: {
-      senderKey: 'digest@dailycodenewsletter.net',
-      unsubscribePriority: 'high',
-      recommendationScore: 95,
-      category: 'Newsletters & Digests',
-      summary: 'Stale newsletter subscription with 0 emails opened in over 95 days.',
-      isSensitive: false,
-    },
-  },
-];
+// Production Live Mode: No demo data loaded by default
+const SAMPLE_SENDERS: GroupedSenderData[] = [];
 
 export default function Home() {
   const { toast } = useToast();
   const [activeView, setActiveView] = useState<'mail' | 'unsub'>('mail');
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('unsub_ai_access_token');
+    }
+    return null;
+  });
+  const [userEmail, setUserEmail] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('unsub_ai_user_email');
+    }
+    return null;
+  });
   const [clientId, setClientId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('unsub_ai_client_id');
@@ -339,7 +90,6 @@ export default function Home() {
   const [senders, setSenders] = useState<GroupedSenderData[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Interactive Action Sets & Maps
@@ -550,21 +300,36 @@ export default function Home() {
           }
 
           if (response.access_token) {
-            setAccessToken(response.access_token);
-            setIsDemoMode(false);
+            const token = response.access_token;
+            setAccessToken(token);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('unsub_ai_access_token', token);
+            }
             setErrorMessage(null);
 
             // Fetch User Profile
             try {
               const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                headers: { Authorization: `Bearer ${response.access_token}` },
+                headers: { Authorization: `Bearer ${token}` },
               });
               if (res.ok) {
                 const info = await res.json();
-                setUserEmail(info.email || 'Connected User');
+                const email = info.email || 'Connected User';
+                setUserEmail(email);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('unsub_ai_user_email', email);
+                }
+              } else {
+                setUserEmail('Connected User');
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('unsub_ai_user_email', 'Connected User');
+                }
               }
             } catch (e) {
               setUserEmail('Connected User');
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('unsub_ai_user_email', 'Connected User');
+              }
             }
           }
         },
@@ -581,9 +346,13 @@ export default function Home() {
   const handleDisconnect = () => {
     setAccessToken(null);
     setUserEmail(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('unsub_ai_access_token');
+      localStorage.removeItem('unsub_ai_user_email');
+    }
     setSenders([]);
     setHasScanned(false);
-    setIsDemoMode(false);
+    toast.info('Disconnected Gmail account.', { title: 'Account Disconnected' });
   };
 
   // Trigger Inbox Scan & AI Priority Scoring
@@ -591,17 +360,10 @@ export default function Home() {
     setIsScanning(true);
     setErrorMessage(null);
 
-    // If no access token, run demo mode with high quality sample data
+    // If no access token, trigger Google OAuth connection flow directly!
     if (!accessToken) {
-      setTimeout(() => {
-        setSenders(SAMPLE_SENDERS);
-        setHasScanned(true);
-        setIsScanning(false);
-        setIsDemoMode(true);
-        toast.info(`Loaded ${SAMPLE_SENDERS.length} demo subscription senders. Connect Gmail to scan your live inbox.`, {
-          title: 'Demo Mode Loaded',
-        });
-      }, 1200);
+      setIsScanning(false);
+      handleConnect();
       return;
     }
 
@@ -626,6 +388,10 @@ export default function Home() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          handleDisconnect();
+          throw new Error('Gmail authorization session expired. Please connect Gmail again.');
+        }
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || `Scan failed with status ${res.status}`);
       }
@@ -649,7 +415,6 @@ export default function Home() {
 
       setSenders(classifiedSenders);
       setHasScanned(true);
-      setIsDemoMode(false);
       toast.success(`Identified ${classifiedSenders.length} recurring subscription sender${classifiedSenders.length === 1 ? '' : 's'}.`, {
         title: 'Inbox Scan Complete',
       });
@@ -701,16 +466,9 @@ export default function Home() {
       }
     } catch (err: any) {
       console.error('Error scanning Gmail:', err);
-      const errMsg = err.message || 'Failed to scan inbox. Ensure permissions are granted or try Demo Mode.';
+      const errMsg = err.message || 'Failed to scan inbox. Please ensure permissions are granted and try reconnecting.';
       setErrorMessage(errMsg);
       toast.error(errMsg, { title: 'Scan Error' });
-
-      // Fallback to demo mode so user experiences full app features
-      if (senders.length === 0) {
-        setSenders(SAMPLE_SENDERS);
-        setHasScanned(true);
-        setIsDemoMode(true);
-      }
     } finally {
       setIsScanning(false);
     }
@@ -754,7 +512,7 @@ export default function Home() {
       setCleaningMap((prev) => ({ ...prev, [key]: true }));
 
       try {
-        if (isDemoMode || !accessToken) {
+        if (!accessToken) {
           await new Promise((r) => setTimeout(r, 300));
           setCleanedSet((prev) => new Set(prev).add(key));
           setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
@@ -865,7 +623,7 @@ export default function Home() {
       setUnsubscribingMap((prev) => ({ ...prev, [key]: true }));
 
       try {
-        if (isDemoMode || !accessToken) {
+        if (!accessToken) {
           await new Promise((r) => setTimeout(r, 400));
           setUnsubscribedSet((prev) => new Set(prev).add(key));
           successCount++;
@@ -984,7 +742,7 @@ export default function Home() {
     setCleaningMap((prev) => ({ ...prev, [key]: true }));
 
     try {
-      if (isDemoMode || !accessToken) {
+      if (!accessToken) {
         await new Promise((r) => setTimeout(r, 500));
         setCleanedSet((prev) => new Set(prev).add(key));
         setCleanedMessagesTotal((prev) => prev + sender.totalEmails);
@@ -1077,65 +835,41 @@ export default function Home() {
       {activeView === 'mail' ? (
         <EmailClientView
           token={accessToken}
+          onConnectGmail={handleConnect}
           onOpenUnsubscribeCenter={() => setActiveView('unsub')}
         />
       ) : (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Banner if not connected */}
         {!accessToken && (
-          <div className="mb-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white p-6 sm:p-8 shadow-xl relative overflow-hidden transition-colors">
+          <div className="mb-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white p-6 sm:p-10 shadow-xl relative overflow-hidden transition-colors">
             <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-            <div className="max-w-2xl relative z-10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold border border-indigo-200 dark:border-indigo-500/20 mb-4">
+            <div className="max-w-2xl relative z-10 space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold border border-indigo-200 dark:border-indigo-500/20">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Gmail Unsubscribe & Filter Assistant</span>
+                <span>Gmail Unsubscribe & Priority Defense</span>
               </div>
 
               <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
-                Review unopened emails & manage unsubscriptions safely.
+                Identify unopened newsletters & clean your inbox safely.
               </h1>
 
-              <p className="text-slate-600 dark:text-zinc-400 text-sm sm:text-base mt-3 leading-relaxed">
-                Connect your Gmail account to categorize subscription emails, evaluate priority levels, and unsubscribe with explicit confirmation.
+              <p className="text-slate-600 dark:text-zinc-400 text-sm sm:text-base leading-relaxed">
+                Connect your Gmail account via secure Google OAuth to automatically index low-engagement senders, protect vital job alerts, and perform 1-click List-Unsubscribes.
               </p>
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="pt-4 flex flex-wrap items-center gap-3">
                 <button
                   onClick={handleConnect}
-                  className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 cursor-pointer active:scale-95"
+                  className="px-8 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-3 cursor-pointer active:scale-95"
                 >
-                  <Mail className="w-4 h-4" />
+                  <Mail className="w-5 h-5" />
                   <span>Connect Gmail Account</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>
-
-                <button
-                  onClick={runScan}
-                  className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-300 font-semibold text-sm transition-colors border border-slate-200 dark:border-zinc-700/80 cursor-pointer"
-                >
-                  Try Demo Mode
-                </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Demo Mode Notice */}
-        {isDemoMode && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs sm:text-sm flex items-center justify-between gap-4">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>
-                <strong>Preview Mode Active:</strong> Currently showing sample email subscriptions. Connect your live Gmail account above to scan your actual inbox!
-              </span>
-            </div>
-            <button
-              onClick={handleConnect}
-              className="px-3.5 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-500 transition-colors shrink-0 cursor-pointer"
-            >
-              Connect Gmail
-            </button>
           </div>
         )}
 
@@ -1173,19 +907,6 @@ export default function Home() {
                 className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-semibold text-xs transition-colors cursor-pointer"
               >
                 Set OAuth Client ID
-              </button>
-
-              <button
-                onClick={() => {
-                  setErrorMessage(null);
-                  setSenders(SAMPLE_SENDERS);
-                  setHasScanned(true);
-                  setIsDemoMode(true);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center space-x-1 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Load Demo Data</span>
               </button>
             </div>
           </div>

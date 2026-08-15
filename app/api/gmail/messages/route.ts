@@ -149,16 +149,100 @@ const MOCK_MESSAGES: EmailMessageSummary[] = [
     labels: ['INBOX', 'IMPORTANT'],
     category: 'primary',
   },
+  {
+    id: 'msg-8',
+    threadId: 'th-8',
+    from: 'Vercel Platform <notifications@vercel.com>',
+    to: 'me',
+    subject: 'Deployment succeeded: applet-production-ecb2reu5',
+    snippet: 'Your preview deployment for main branch is live. Edge functions executed in 14ms.',
+    date: 'Aug 11',
+    timestamp: Date.now() - 1000 * 60 * 60 * 110,
+    isUnread: false,
+    isStarred: false,
+    hasAttachment: false,
+    labels: ['INBOX', 'CATEGORY_UPDATES'],
+    category: 'updates',
+  },
+  {
+    id: 'msg-9',
+    threadId: 'th-9',
+    from: 'Linear Support <team@linear.app>',
+    to: 'me',
+    subject: 'Issue LIN-4091: Workspace integration roadmap completed',
+    snippet: 'Your feature request for automatic OAuth scoping and batch email pagination was closed as completed.',
+    date: 'Aug 10',
+    timestamp: Date.now() - 1000 * 60 * 60 * 135,
+    isUnread: false,
+    isStarred: false,
+    hasAttachment: false,
+    labels: ['INBOX', 'IMPORTANT'],
+    category: 'primary',
+  },
+  {
+    id: 'msg-10',
+    threadId: 'th-10',
+    from: 'Product Hunt Daily <digest@producthunt.com>',
+    to: 'me',
+    subject: 'Top 5 AI email organizers launched today',
+    snippet: 'Check out the top voted developer tools, productivity apps, and email cleanup algorithms of the week.',
+    date: 'Aug 09',
+    timestamp: Date.now() - 1000 * 60 * 60 * 155,
+    isUnread: true,
+    isStarred: false,
+    hasAttachment: false,
+    labels: ['INBOX', 'CATEGORY_PROMOTIONS'],
+    category: 'promotions',
+    unsubscribeHeader: {
+      hasHeader: true,
+      webUrl: 'https://producthunt.com/my/preferences',
+    },
+  },
+  {
+    id: 'msg-11',
+    threadId: 'th-11',
+    from: 'AWS Cloud Security <no-reply@amazon.com>',
+    to: 'me',
+    subject: 'AWS Budget Alert: 85% of monthly threshold reached',
+    snippet: 'Your Cloud Run & DynamoDB infrastructure usage reached $42.50 of your $50.00 monthly allocation.',
+    date: 'Aug 08',
+    timestamp: Date.now() - 1000 * 60 * 60 * 180,
+    isUnread: true,
+    isStarred: true,
+    hasAttachment: false,
+    labels: ['INBOX', 'IMPORTANT'],
+    category: 'updates',
+  },
+  {
+    id: 'msg-12',
+    threadId: 'th-12',
+    from: 'Coursera Team <learn@coursera.org>',
+    to: 'me',
+    subject: 'Your Certificate: Advanced Distributed Systems Architecture',
+    snippet: 'Congratulations! You completed the course. Share your verified certificate on LinkedIn or download PDF.',
+    date: 'Aug 07',
+    timestamp: Date.now() - 1000 * 60 * 60 * 200,
+    isUnread: false,
+    isStarred: false,
+    hasAttachment: true,
+    labels: ['INBOX', 'CATEGORY_PROMOTIONS'],
+    category: 'promotions',
+    unsubscribeHeader: {
+      hasHeader: true,
+      webUrl: 'https://coursera.org/account-settings/email-preferences',
+    },
+  },
 ];
 
 export async function POST(req: NextRequest) {
   try {
-    const { folder = 'INBOX', q = '', pageToken = '', maxResults = 30 } = await req.json();
+    const { folder = 'INBOX', q = '', pageToken = '', maxResults = 25 } = await req.json();
 
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
     const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
+    const fetchBatchSize = Math.min(Math.max(Number(maxResults) || 25, 5), 50);
 
-    // If OAuth token is provided, fetch real Gmail messages!
+    // If OAuth token is provided, fetch real Gmail messages with backend pagination!
     if (token && !token.startsWith('mock_')) {
       try {
         let gmailQuery = '';
@@ -178,8 +262,10 @@ export async function POST(req: NextRequest) {
 
         const listUrl = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
         listUrl.searchParams.set('q', gmailQuery);
-        listUrl.searchParams.set('maxResults', String(Math.min(maxResults, 50)));
-        if (pageToken) listUrl.searchParams.set('pageToken', pageToken);
+        listUrl.searchParams.set('maxResults', String(fetchBatchSize));
+        if (pageToken && pageToken.trim()) {
+          listUrl.searchParams.set('pageToken', pageToken.trim());
+        }
 
         const listRes = await fetch(listUrl.toString(), {
           headers: { Authorization: `Bearer ${token}` },
@@ -190,8 +276,8 @@ export async function POST(req: NextRequest) {
           const messageSummaries: EmailMessageSummary[] = [];
 
           if (listData.messages && Array.isArray(listData.messages)) {
-            // Fetch metadata in parallel batches of 10
-            const msgPromises = listData.messages.slice(0, 30).map(async (item: { id: string; threadId: string }) => {
+            // Fetch metadata in small parallel batches to prevent gateway/Cloud Run timeouts
+            const msgPromises = listData.messages.map(async (item: { id: string; threadId: string }) => {
               try {
                 const metaRes = await fetch(
                   `https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Unsubscribe-Post`,
@@ -206,7 +292,6 @@ export async function POST(req: NextRequest) {
                 const from = getHeader('From') || 'Unknown Sender';
                 const to = getHeader('To') || 'me';
                 const subject = getHeader('Subject') || '(No Subject)';
-                const dateStr = getHeader('Date');
                 const listUnsub = getHeader('List-Unsubscribe');
                 const listUnsubPost = getHeader('List-Unsubscribe-Post');
 
@@ -282,6 +367,7 @@ export async function POST(req: NextRequest) {
             success: true,
             messages: messageSummaries,
             nextPageToken: listData.nextPageToken || null,
+            resultSizeEstimate: listData.resultSizeEstimate || messageSummaries.length,
             isLive: true,
           });
         }
@@ -290,7 +376,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback Mock Filter
+    // Fallback Mock Filtering with Mock PageToken Pagination
     let filtered = [...MOCK_MESSAGES];
     if (folder === 'STARRED') {
       filtered = filtered.filter((m) => m.isStarred);
@@ -346,13 +432,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Paginate Mock Results
+    const pageSize = Math.min(Math.max(Number(maxResults) || 5, 2), 20);
+    let pageIndex = 0;
+    if (pageToken && pageToken.startsWith('mock_page_')) {
+      const pNum = parseInt(pageToken.replace('mock_page_', ''), 10);
+      if (!isNaN(pNum) && pNum > 0) {
+        pageIndex = pNum - 1;
+      }
+    }
+
+    const startIndex = pageIndex * pageSize;
+    const paginatedMessages = filtered.slice(startIndex, startIndex + pageSize);
+    const hasNextPage = startIndex + pageSize < filtered.length;
+    const nextMockPageToken = hasNextPage ? `mock_page_${pageIndex + 2}` : null;
+
     return NextResponse.json({
       success: true,
-      messages: filtered,
-      nextPageToken: null,
+      messages: paginatedMessages,
+      nextPageToken: nextMockPageToken,
+      resultSizeEstimate: filtered.length,
       isLive: false,
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message || 'Failed to list messages' }, { status: 500 });
   }
 }
+

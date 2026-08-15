@@ -50,60 +50,62 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </Link>
 
-          {/* Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1.5 shrink-0">
+          {/* Navigation Links - Desktop & Mobile Adaptive */}
+          <nav className="flex items-center space-x-1.5 shrink-0">
             {pathname === '/' && onViewChange ? (
               <div className="flex items-center p-0.5 rounded-full bg-slate-200/60 dark:bg-zinc-800/80 border border-slate-300/60 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => onViewChange('mail')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center space-x-1 sm:space-x-1.5 cursor-pointer ${
                     activeView === 'mail'
                       ? 'bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-300 shadow-xs'
                       : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <Mail className="w-3.5 h-3.5" />
-                  <span>Mail Client</span>
+                  <span className="hidden xs:inline">Mail Client</span>
+                  <span className="xs:hidden">Mail</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => onViewChange('unsub')}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center space-x-1 sm:space-x-1.5 cursor-pointer ${
                     activeView === 'unsub'
                       ? 'bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-xs'
                       : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                  <span>Unsubscribe Hub</span>
+                  <span className="hidden xs:inline">Unsubscribe Hub</span>
+                  <span className="xs:hidden">Unsub</span>
                 </button>
               </div>
             ) : (
               <Link
                 href="/"
-                className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 whitespace-nowrap border ${
+                className={`px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center space-x-1.5 sm:space-x-2 whitespace-nowrap border ${
                   pathname === '/'
                     ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-200/80 dark:border-indigo-800/80 text-indigo-600 dark:text-indigo-300 shadow-xs backdrop-blur-md'
                     : 'border-transparent text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-zinc-800/50'
                 }`}
               >
                 <LayoutDashboard className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                <span>Dashboard</span>
+                <span className="hidden sm:inline">Dashboard</span>
               </Link>
             )}
 
             <Link
               href="/settings"
-              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 whitespace-nowrap border ${
+              className={`px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center space-x-1.5 sm:space-x-2 whitespace-nowrap border ${
                 pathname === '/settings'
                   ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-200/80 dark:border-indigo-800/80 text-indigo-600 dark:text-indigo-300 shadow-xs backdrop-blur-md'
                   : 'border-transparent text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-zinc-800/50'
               }`}
             >
               <SlidersHorizontal className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
-              <span>Rules & Preferences</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+              <span className="hidden md:inline">Rules & Preferences</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 hidden sm:block" />
             </Link>
           </nav>
         </div>

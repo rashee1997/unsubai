@@ -53,6 +53,30 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
+  // Synchronize connection state with local storage
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('unsub_ai_access_token');
+    }
+    return null;
+  });
+  const [userEmail, setUserEmail] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('unsub_ai_user_email');
+    }
+    return null;
+  });
+
+  const handleDisconnect = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('unsub_ai_access_token');
+      localStorage.removeItem('unsub_ai_user_email');
+    }
+    setAccessToken(null);
+    setUserEmail(null);
+    toast.info('Disconnected Gmail account.', { title: 'Account Disconnected' });
+  };
+
   const handleSave = () => {
     saveStoredSettings(settings);
     setSavedSuccess(true);
@@ -191,12 +215,16 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0A0A0B] text-slate-900 dark:text-zinc-100 transition-colors duration-200">
       <Navbar
-        userEmail="rasheedhmech03@gmail.com"
-        isConnected={true}
-        onConnect={() => {}}
-        onDisconnect={() => {}}
+        userEmail={userEmail}
+        isConnected={!!accessToken}
+        onConnect={() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+        }}
+        onDisconnect={handleDisconnect}
         isScanning={false}
-        unsubscribedCount={2}
+        unsubscribedCount={0}
       />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-20">

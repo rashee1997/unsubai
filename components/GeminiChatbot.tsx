@@ -52,6 +52,7 @@ import {
 import { GroupedSenderData } from '@/components/SenderCard';
 import { AppSettings, CustomFilterRule } from '@/lib/settings';
 import { AuditLogEntry } from '@/components/AuditLogModal';
+import { FormattedMarkdown } from '@/components/FormattedMarkdown';
 
 export const DEFAULT_DEMO_SENDERS: GroupedSenderData[] = [
   {
@@ -808,7 +809,15 @@ export function GeminiChatbot({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const assistantMsgId = `model-${Date.now()}`;
+    const initialAssistantMsg: ChatMessage = {
+      id: assistantMsgId,
+      role: 'model',
+      content: '',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessages((prev) => [...prev, userMsg, initialAssistantMsg]);
     if (!textToSend) setInputValue('');
     setIsTyping(true);
 
@@ -840,6 +849,7 @@ export function GeminiChatbot({
           messages: historyPayload,
           systemRole,
           context: contextData,
+          stream: true,
         }),
       });
 
@@ -848,12 +858,64 @@ export function GeminiChatbot({
         throw new Error(err.error || 'Failed to communicate with Gemini');
       }
 
-      const data = await res.json();
-      const assistantText = data.text || '';
-      const functionCalls = data.functionCalls;
+      let accumulatedText = '';
+      const functionCalls: any[] = [];
+
+      // Check if response is stream or json
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const event of events) {
+            if (!event.trim()) continue;
+            const lines = event.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.slice(6).trim();
+                if (!jsonStr) continue;
+                try {
+                  const payload = JSON.parse(jsonStr);
+                  if (payload.type === 'text' && payload.text) {
+                    accumulatedText += payload.text;
+                    const textNow = accumulatedText;
+                    setMessages((prev) =>
+                      prev.map((m) => (m.id === assistantMsgId ? { ...m, content: textNow } : m))
+                    );
+                  } else if (payload.type === 'functionCalls' && payload.functionCalls) {
+                    functionCalls.push(...payload.functionCalls);
+                  } else if (payload.type === 'error') {
+                    throw new Error(payload.error);
+                  }
+                } catch (e: any) {
+                  if (e.message?.includes('stream error') || e.message?.includes('Gemini')) {
+                    throw e;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        const data = await res.json();
+        accumulatedText = data.text || '';
+        if (data.functionCalls) functionCalls.push(...data.functionCalls);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantMsgId ? { ...m, content: accumulatedText } : m))
+        );
+      }
 
       // Handle Function Calls
-      if (functionCalls && functionCalls.length > 0) {
+      if (functionCalls.length > 0) {
         for (const call of functionCalls) {
           const { name, args } = call;
 
@@ -890,7 +952,6 @@ export function GeminiChatbot({
               uiWidgetType = 'audit';
             }
 
-            // Determine natural language fallback
             let fallbackNaturalText = '';
             if (name === 'search_senders') {
               fallbackNaturalText = `Found **${toolResult.matchCount || (toolResult.senders?.length ?? 0)}** matching subscription senders in your inbox. You can manage, inspect, or protect each below:`;
@@ -906,11 +967,28 @@ export function GeminiChatbot({
               fallbackNaturalText = 'Here are the requested insights:';
             }
 
-            // Send tool result back to Gemini for final natural language response
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === assistantMsgId) {
+                  return {
+                    ...m,
+                    content: m.content || fallbackNaturalText,
+                    uiWidgetType,
+                    senderCards: senderCardsPayload,
+                    inspectorData: inspectorPayload,
+                    simulationData: simulationPayload,
+                    healthData: healthPayload,
+                  };
+                }
+                return m;
+              })
+            );
+
+            // Send tool result back to Gemini for final natural language response with streaming
             const toolResponseHistory = historyPayload.concat([
               {
                 role: 'model',
-                content: assistantText || `Executing tool ${name}`,
+                content: accumulatedText || `Executing tool ${name}`,
                 functionCalls: [call],
               },
               {
@@ -927,40 +1005,56 @@ export function GeminiChatbot({
                 messages: toolResponseHistory,
                 systemRole,
                 context: contextData,
+                stream: true,
               }),
             });
 
-            if (followUpRes.ok) {
-              const followUpData = await followUpRes.json();
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: `model-${Date.now()}`,
-                  role: 'model',
-                  content: followUpData.text || fallbackNaturalText,
-                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  uiWidgetType,
-                  senderCards: senderCardsPayload,
-                  inspectorData: inspectorPayload,
-                  simulationData: simulationPayload,
-                  healthData: healthPayload,
-                },
-              ]);
-            } else {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: `model-${Date.now()}`,
-                  role: 'model',
-                  content: assistantText || fallbackNaturalText,
-                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  uiWidgetType,
-                  senderCards: senderCardsPayload,
-                  inspectorData: inspectorPayload,
-                  simulationData: simulationPayload,
-                  healthData: healthPayload,
-                },
-              ]);
+            if (followUpRes.ok && followUpRes.body) {
+              const followUpContentType = followUpRes.headers.get('content-type') || '';
+              if (followUpContentType.includes('text/event-stream')) {
+                const fReader = followUpRes.body.getReader();
+                const fDecoder = new TextDecoder();
+                let fBuffer = '';
+                let fText = accumulatedText ? `${accumulatedText}\n\n` : '';
+
+                while (true) {
+                  const { done: fDone, value: fVal } = await fReader.read();
+                  if (fDone) break;
+
+                  fBuffer += fDecoder.decode(fVal, { stream: true });
+                  const fEvents = fBuffer.split('\n\n');
+                  fBuffer = fEvents.pop() || '';
+
+                  for (const fEv of fEvents) {
+                    if (!fEv.trim()) continue;
+                    const fLines = fEv.split('\n');
+                    for (const fL of fLines) {
+                      if (fL.startsWith('data: ')) {
+                        const fJson = fL.slice(6).trim();
+                        if (!fJson) continue;
+                        try {
+                          const fPayload = JSON.parse(fJson);
+                          if (fPayload.type === 'text' && fPayload.text) {
+                            fText += fPayload.text;
+                            const currentF = fText;
+                            setMessages((prev) =>
+                              prev.map((m) => (m.id === assistantMsgId ? { ...m, content: currentF } : m))
+                            );
+                          }
+                        } catch (e) {
+                          // ignore json parse error
+                        }
+                      }
+                    }
+                  }
+                }
+              } else {
+                const followUpData = await followUpRes.json();
+                const finalText = followUpData.text || fallbackNaturalText;
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantMsgId ? { ...m, content: finalText } : m))
+                );
+              }
             }
           } else {
             // WRITE / CRUD Operation -> REQUIRES HUMAN-IN-THE-LOOP CONFIRMATION
@@ -974,40 +1068,40 @@ export function GeminiChatbot({
               selectedSenderKeys: initialSelected,
             };
 
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `model-hitl-${Date.now()}`,
-                role: 'model',
-                content: assistantText || `I have prepared this inbox update for your review:`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                pendingTool,
-              },
-            ]);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      content: m.content || `I have prepared this inbox update for your review:`,
+                      pendingTool,
+                    }
+                  : m
+              )
+            );
           }
         }
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `model-${Date.now()}`,
-            role: 'model',
-            content: assistantText || 'I processed your request. Let me know if you need further adjustments.',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          },
-        ]);
+      } else if (!accumulatedText.trim()) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? { ...m, content: 'I processed your request. Let me know if you need further adjustments.' }
+              : m
+          )
+        );
       }
     } catch (err: any) {
       console.error('Chatbot error:', err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `model-error-${Date.now()}`,
-          role: 'model',
-          content: `⚠️ **Connection issue:** ${err.message || 'Could not connect to Gemini.'}\n\nPlease verify your network or try asking again.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? {
+                ...m,
+                content: `⚠️ **Connection issue:** ${err.message || 'Could not connect to Gemini.'}\n\nPlease verify your network or try asking again.`,
+              }
+            : m
+        )
+      );
     } finally {
       setIsTyping(false);
     }
@@ -1395,13 +1489,13 @@ export function GeminiChatbot({
                         {/* Text Message */}
                         {msg.content && (
                           <div
-                            className={`max-w-[92%] p-3 rounded-2xl leading-relaxed whitespace-pre-wrap ${
+                            className={`max-w-[92%] p-3 rounded-2xl leading-relaxed ${
                               isUser
-                                ? 'bg-indigo-600 text-white rounded-br-xs font-medium shadow-xs'
+                                ? 'bg-indigo-600 text-white rounded-br-xs font-medium shadow-xs whitespace-pre-wrap'
                                 : 'bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 rounded-bl-xs border border-slate-200/80 dark:border-zinc-700/60'
                             }`}
                           >
-                            {msg.content}
+                            {isUser ? msg.content : <FormattedMarkdown content={msg.content} />}
                           </div>
                         )}
 
