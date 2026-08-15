@@ -23,6 +23,15 @@ import {
   Mail,
   Layers,
   Briefcase,
+  Zap,
+  AlertTriangle,
+  UserX,
+  Eye,
+  Check,
+  Calendar,
+  ChevronRight,
+  Inbox,
+  Flame,
 } from 'lucide-react';
 import {
   BarChart,
@@ -35,7 +44,7 @@ import {
   Cell,
 } from 'recharts';
 import { GroupedSenderData, AIAnalysisData } from './SenderCard';
-import { classifySender, isJobAlertSender } from '@/lib/classification';
+import { classifySender, isJobAlertSender, isStaleSubscription, calculateDaysAgo } from '@/lib/classification';
 
 export interface InboxHealthDashboardProps {
   totalSenders: number;
@@ -45,9 +54,13 @@ export interface InboxHealthDashboardProps {
   cleanedMessagesCount: number;
   senders?: GroupedSenderData[];
   jobAlertsCount?: number;
+  unsubscribedSet?: Set<string>;
   onBulkTrashHighPriority?: () => void;
   onBulkUnsubscribeHighPriority?: () => void;
   onBulkUnsubscribeAll?: () => void;
+  onBulkUnsubscribeStale?: (staleSenders: GroupedSenderData[]) => void;
+  onUnsubscribeSingle?: (sender: GroupedSenderData) => void;
+  onOpenPreview?: (sender: GroupedSenderData) => void;
   onSelectJobAlertsFilter?: () => void;
 }
 
@@ -95,9 +108,13 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
   cleanedMessagesCount,
   senders = [],
   jobAlertsCount,
+  unsubscribedSet,
   onBulkTrashHighPriority,
   onBulkUnsubscribeHighPriority,
   onBulkUnsubscribeAll,
+  onBulkUnsubscribeStale,
+  onUnsubscribeSingle,
+  onOpenPreview,
   onSelectJobAlertsFilter,
 }) => {
   const isMounted = useIsMounted();
@@ -112,6 +129,14 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
       const analysis = s.analysis || classifySender(s);
       return analysis.isJobRelated || isJobAlertSender(s) || analysis.category?.toLowerCase().includes('job');
     }).length;
+
+  // Stale Subscriptions Detection: senders with 0 emails opened in over 90 days
+  const staleSubscriptions = senders.filter((s) => isStaleSubscription(s));
+  const activeStaleSubscriptions = staleSubscriptions.filter(
+    (s) => !unsubscribedSet?.has(s.senderKey)
+  );
+  const staleTotalEmails = staleSubscriptions.reduce((acc, s) => acc + s.totalEmails, 0);
+  const staleUnopenedEmails = staleSubscriptions.reduce((acc, s) => acc + s.unreadCount, 0);
 
   // Category distribution calculation
   const processCategoryData = () => {
@@ -331,6 +356,226 @@ export const InboxHealthDashboard: React.FC<InboxHealthDashboardProps> = ({
               <span>{cleanedMessagesCount} emails trashed/archived</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Smart Recommendations Section */}
+      <div className="glass-panel p-5 sm:p-6 transition-all space-y-4 border border-slate-200/90 dark:border-white/10">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-white/10 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center backdrop-blur-md">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Smart Recommendations</span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-700/60">
+                  AI Engagement Insights
+                </span>
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+              Automated behavioral signals highlighting inactive senders, unread newsletters, and inbox decluttering actions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>{staleSubscriptions.length} Stale Subscriptions</span>
+            </div>
+            {activeStaleSubscriptions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBulkUnsubscribeStale) {
+                    onBulkUnsubscribeStale(activeStaleSubscriptions);
+                  } else if (onBulkUnsubscribeHighPriority) {
+                    onBulkUnsubscribeHighPriority();
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-600 via-rose-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer active:scale-95 shrink-0"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-200 fill-amber-200" />
+                <span>Bulk Unsubscribe ({activeStaleSubscriptions.length})</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Highlight Card: Stale Subscriptions */}
+        <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-amber-50/70 via-white/80 to-rose-50/40 dark:from-amber-950/20 dark:via-zinc-900/80 dark:to-zinc-900/60 border border-amber-200/90 dark:border-amber-700/50 shadow-xs space-y-4">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100/90 dark:bg-amber-950/90 text-amber-900 dark:text-amber-300 border border-amber-300/80 dark:border-amber-700/80 shadow-2xs">
+                  <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  Stale Subscriptions
+                </span>
+                <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                  0 Emails Opened in &gt;90 Days
+                </span>
+              </div>
+              <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                {staleSubscriptions.length > 0
+                  ? `Identified ${staleSubscriptions.length} sender${staleSubscriptions.length === 1 ? '' : 's'} with 0 opened emails in over 90 days (${staleTotalEmails} unread emails)`
+                  : 'No Stale Subscriptions Detected'}
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-zinc-400 max-w-3xl leading-relaxed">
+                {staleSubscriptions.length > 0
+                  ? `These senders continue delivering recurring newsletters and promotions, but you haven't opened any message in over 3 months. Unsubscribing now safely eliminates ongoing inbox noise without interrupting active discussions.`
+                  : `All subscriptions in your active inbox have either recent opens or activity within the past 90 days. We will continue monitoring your reading frequency.`}
+              </p>
+            </div>
+
+            {/* Quick Bulk Unsubscribe Action */}
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
+              {activeStaleSubscriptions.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onBulkUnsubscribeStale) {
+                      onBulkUnsubscribeStale(activeStaleSubscriptions);
+                    } else if (onBulkUnsubscribeHighPriority) {
+                      onBulkUnsubscribeHighPriority();
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-600 via-rose-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center justify-center space-x-2 shadow-md cursor-pointer active:scale-95"
+                >
+                  <Zap className="w-4 h-4 text-amber-200 fill-amber-200" />
+                  <span>One-Click Bulk Unsubscribe ({activeStaleSubscriptions.length})</span>
+                </button>
+              ) : staleSubscriptions.length > 0 ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-100/90 dark:bg-emerald-950/90 text-emerald-800 dark:text-emerald-300 text-xs font-bold border border-emerald-300/80 dark:border-emerald-700/80 shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>All Stale Subscriptions Unsubscribed</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Stale Senders Grid */}
+          {staleSubscriptions.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              {staleSubscriptions.map((sender) => {
+                const isUnsub = unsubscribedSet?.has(sender.senderKey);
+                const daysAgo = calculateDaysAgo(sender.latestTimestamp);
+                const analysis = sender.analysis || classifySender(sender);
+
+                return (
+                  <div
+                    key={sender.senderKey}
+                    className={`rounded-xl p-3.5 border transition-all flex flex-col justify-between backdrop-blur-md ${
+                      isUnsub
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300/80 dark:border-emerald-800/60 opacity-90'
+                        : 'bg-white/80 dark:bg-zinc-900/80 border-slate-200/90 dark:border-white/10 hover:border-amber-400 dark:hover:border-amber-600 shadow-2xs'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-amber-100/80 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-bold flex items-center justify-center uppercase text-xs shrink-0 border border-amber-200/80 dark:border-amber-800/60">
+                            {sender.fromName.charAt(0) || 'M'}
+                          </div>
+                          <div className="min-w-0">
+                            <h5 className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                              {sender.fromName}
+                            </h5>
+                            <p className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 truncate">
+                              {sender.fromEmail}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100/80 dark:bg-zinc-800 text-[10px] font-medium text-slate-600 dark:text-zinc-400 shrink-0 border border-slate-200 dark:border-zinc-700">
+                          {analysis.category}
+                        </span>
+                      </div>
+
+                      {/* Stale Key Metrics */}
+                      <div className="space-y-1.5 my-2.5 p-2 rounded-lg bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 text-[11px]">
+                        <div className="flex items-center justify-between text-amber-900 dark:text-amber-200">
+                          <span className="font-medium flex items-center gap-1">
+                            <UserX className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            Open Rate:
+                          </span>
+                          <span className="font-bold font-mono text-rose-600 dark:text-rose-400">
+                            0% (0 / {sender.totalEmails} opened)
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-600 dark:text-zinc-400">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            Last Received:
+                          </span>
+                          <span className="font-mono text-slate-800 dark:text-zinc-200 font-semibold">
+                            {sender.latestDate || `${daysAgo}d ago`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {sender.sampleSubject && (
+                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 line-clamp-1 italic mb-3">
+                          &quot;{sender.sampleSubject}&quot;
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action Footer */}
+                    <div className="pt-2 border-t border-slate-200/60 dark:border-white/5 flex items-center justify-between gap-2">
+                      {isUnsub ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 py-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Unsubscribed
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onUnsubscribeSingle) {
+                              onUnsubscribeSingle(sender);
+                            } else if (onBulkUnsubscribeStale) {
+                              onBulkUnsubscribeStale([sender]);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>Unsubscribe</span>
+                        </button>
+                      )}
+
+                      {onOpenPreview && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPreview(sender)}
+                          className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3 text-slate-400" />
+                          <span>Preview</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-white/60 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-white/10 flex items-center gap-3 text-xs text-slate-600 dark:text-zinc-300">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="font-bold text-slate-900 dark:text-white text-xs">
+                  Clean Engagement Record
+                </h5>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                  No subscriptions with 0 opens in over 90 days were detected in your current scan.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

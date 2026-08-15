@@ -114,6 +114,74 @@ const FINANCE_KEYWORDS = [
 ];
 
 /**
+ * Calculates days elapsed since a timestamp.
+ */
+export function calculateDaysAgo(timestamp?: number): number {
+  if (!timestamp) return 90;
+  const diffMs = Date.now() - timestamp;
+  return Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)));
+}
+
+/**
+ * Checks if a sender qualifies as a 'stale subscription' (0 emails opened in over 90 days).
+ */
+export function isStaleSubscription(sender: {
+  totalEmails?: number;
+  unreadCount?: number;
+  latestTimestamp?: number;
+  latestDate?: string;
+  timestamps?: number[];
+  frequencyHistory?: number[];
+}): boolean {
+  const total = sender.totalEmails ?? 0;
+  const unread = sender.unreadCount ?? 0;
+  const opened = Math.max(0, total - unread);
+
+  // Must have 0 opened emails (i.e. 100% unread / 0 opens)
+  if (total === 0 || opened > 0) {
+    return false;
+  }
+
+  const now = Date.now();
+  const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+  // 1. Check latestTimestamp if present
+  if (sender.latestTimestamp && now - sender.latestTimestamp >= NINETY_DAYS_MS) {
+    return true;
+  }
+
+  // 2. Check timestamps array if present
+  if (sender.timestamps && sender.timestamps.length > 0) {
+    const newest = Math.max(...sender.timestamps);
+    const oldest = Math.min(...sender.timestamps);
+    if (now - newest >= NINETY_DAYS_MS || now - oldest >= NINETY_DAYS_MS) {
+      return true;
+    }
+  }
+
+  // 3. Fallback on textual latestDate
+  const dateStr = (sender.latestDate || '').toLowerCase();
+  if (
+    dateStr.includes('90') ||
+    dateStr.includes('100') ||
+    dateStr.includes('105') ||
+    dateStr.includes('110') ||
+    dateStr.includes('120') ||
+    dateStr.includes('150') ||
+    dateStr.includes('180') ||
+    dateStr.includes('month') ||
+    dateStr.includes('year') ||
+    dateStr.includes('2025') ||
+    dateStr.includes('2024') ||
+    dateStr.includes('2023')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Checks if a sender represents a job alert, career recommendation, or recruiter email.
  */
 export function isJobAlertSender(sender: {

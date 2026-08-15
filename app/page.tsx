@@ -211,6 +211,78 @@ const SAMPLE_SENDERS: GroupedSenderData[] = [
       isJobRelated: false,
     },
   },
+  {
+    senderKey: 'deals@gadgetvaultweekly.com',
+    fromName: 'GadgetVault Old Promotions',
+    fromEmail: 'deals@gadgetvaultweekly.com',
+    domain: 'gadgetvaultweekly.com',
+    totalEmails: 15,
+    unreadCount: 15,
+    latestDate: '110 days ago',
+    latestTimestamp: Date.now() - 110 * 86400000,
+    sampleSubject: 'Special clearance discount on wireless gear & smart accessories',
+    sampleSnippet: 'Final sale liquidation event on tech gear and audio headphones. Unsubscribe at preferences page.',
+    unsubscribeUrl: 'https://gadgetvaultweekly.com/unsubscribe?user=demo',
+    unsubscribeMailto: 'mailto:unsub@gadgetvaultweekly.com?subject=Unsubscribe',
+    unsubscribePostHeader: 'List-Unsubscribe=One-Click',
+    messageIds: ['demo-stale-1', 'demo-stale-2'],
+    unreadMessageIds: ['demo-stale-1', 'demo-stale-2'],
+    frequencyHistory: [4, 4, 3, 4],
+    frequencyTrend: {
+      direction: 'decreasing',
+      percentChange: 25,
+      label: 'Volume Inactive (No opens in 110d)',
+      badgeLabel: 'Stale (>90d)',
+      sparkline: [4, 4, 3, 4],
+      recentCount: 0,
+      olderCount: 15,
+      breakdownLabels: ['110d ago: 4', '100d ago: 4', '95d ago: 3', '90d ago: 4'],
+    },
+    analysis: {
+      senderKey: 'deals@gadgetvaultweekly.com',
+      unsubscribePriority: 'high',
+      recommendationScore: 98,
+      category: 'E-Commerce & Promos',
+      summary: 'Stale subscription with 15 emails and 0 opens in over 110 days. Recommended for one-click unsubscribe.',
+      isSensitive: false,
+    },
+  },
+  {
+    senderKey: 'digest@dailycodenewsletter.net',
+    fromName: 'Daily Code Digest Archive',
+    fromEmail: 'digest@dailycodenewsletter.net',
+    domain: 'dailycodenewsletter.net',
+    totalEmails: 11,
+    unreadCount: 11,
+    latestDate: '95 days ago',
+    latestTimestamp: Date.now() - 95 * 86400000,
+    sampleSubject: 'Tech stack round-up and cloud architecture news archive',
+    sampleSnippet: 'Weekly round-up digest on backend scalability and framework updates. You can manage your subscription settings at any time.',
+    unsubscribeUrl: 'https://dailycodenewsletter.net/unsub?user=demo',
+    unsubscribeMailto: null,
+    unsubscribePostHeader: null,
+    messageIds: ['demo-stale-3'],
+    unreadMessageIds: ['demo-stale-3'],
+    frequencyHistory: [3, 3, 3, 2],
+    frequencyTrend: {
+      direction: 'decreasing',
+      percentChange: 30,
+      label: 'Volume Inactive (No opens in 95d)',
+      badgeLabel: 'Stale (>90d)',
+      sparkline: [3, 3, 3, 2],
+      recentCount: 0,
+      olderCount: 11,
+      breakdownLabels: ['95d ago: 3', '90d ago: 3', '85d ago: 3', '80d ago: 2'],
+    },
+    analysis: {
+      senderKey: 'digest@dailycodenewsletter.net',
+      unsubscribePriority: 'high',
+      recommendationScore: 95,
+      category: 'Newsletters & Digests',
+      summary: 'Stale newsletter subscription with 0 emails opened in over 95 days.',
+      isSensitive: false,
+    },
+  },
 ];
 
 export default function Home() {
@@ -1128,9 +1200,16 @@ export default function Home() {
             cleanedMessagesCount={cleanedMessagesTotal}
             senders={senders}
             jobAlertsCount={jobAlertsCount}
+            unsubscribedSet={unsubscribedSet}
             onBulkTrashHighPriority={openBulkTrashModalForHighPriority}
             onBulkUnsubscribeHighPriority={() => openConfirmModalForBatch(highPriorityList)}
             onBulkUnsubscribeAll={() => openConfirmModalForBatch(senders)}
+            onBulkUnsubscribeStale={(staleList) => openConfirmModalForBatch(staleList)}
+            onUnsubscribeSingle={(sender) => openConfirmModalForSender(sender)}
+            onOpenPreview={(sender) => {
+              setPreviewingSender(sender);
+              setIsPreviewModalOpen(true);
+            }}
             onSelectJobAlertsFilter={() => setPriorityFilter('job_alerts')}
           />
         )}
