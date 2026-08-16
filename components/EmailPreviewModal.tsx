@@ -57,6 +57,30 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [copiedFilter, setCopiedFilter] = useState(false);
+  const [iframeHeight, setIframeHeight] = useState(450);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Always reset scroll to top when message, tab, or preview data changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [selectedMsgIndex, activeTab, previewData, isOpen]);
+
+  // Synchronize height from embedded message postMessage
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'EMAIL_MODAL_IFRAME_RESIZE' && typeof event.data.height === 'number') {
+        const measured = Math.ceil(event.data.height);
+        if (measured > 50) {
+          setIframeHeight(measured);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   // Load message content when modal opens or selectedMsgIndex changes
   useEffect(() => {
@@ -254,7 +278,10 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
         </div>
 
         {/* Content Preview Body */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 bg-slate-50/40 dark:bg-zinc-950/40 min-h-[360px] max-h-[500px]">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto p-5 sm:p-6 bg-slate-50/40 dark:bg-zinc-950/40 min-h-[360px] max-h-[500px]"
+        >
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500 dark:text-zinc-400">
               <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mb-3" />
@@ -273,7 +300,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
             <>
               {/* Tab 1: Interactive Formatted HTML View */}
               {activeTab === 'rendered' && (
-                <div className="w-full h-full bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden shadow-xs">
+                <div className="w-full bg-white rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden shadow-xs">
                   {previewData?.htmlBody ? (
                     <iframe
                       title="Full Email Preview"
@@ -283,19 +310,87 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                           <head>
                             <meta charset="utf-8"/>
                             <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+                            <base target="_blank">
                             <style>
-                              body { margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; background-color: #ffffff; }
-                              img { max-width: 100%; height: auto; }
-                              a { color: #4f46e5; text-decoration: underline; }
+                              html, body {
+                                margin: 0;
+                                padding: 16px;
+                                background-color: #ffffff;
+                                color: #222222;
+                                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                                font-size: 14px;
+                                line-height: 1.5;
+                                -webkit-font-smoothing: antialiased;
+                                overflow: hidden !important;
+                                height: auto !important;
+                                min-height: 0 !important;
+                              }
+                              img { max-width: 100% !important; height: auto !important; }
+                              table { border-spacing: 0; }
                             </style>
                           </head>
                           <body>
                             ${previewData.htmlBody}
+                            <script>
+                              window.scrollTo(0, 0);
+                              if (document.documentElement) document.documentElement.scrollTop = 0;
+                              if (document.body) document.body.scrollTop = 0;
+
+                              function sendH() {
+                                try {
+                                  var b = document.body;
+                                  var e = document.documentElement;
+                                  if (!b && !e) return;
+                                  var h = Math.max(
+                                    b ? b.scrollHeight : 0,
+                                    b ? b.offsetHeight : 0,
+                                    e ? e.scrollHeight : 0,
+                                    e ? e.offsetHeight : 0,
+                                    e ? e.clientHeight : 0
+                                  );
+                                  if (h > 0) {
+                                    window.parent.postMessage({ type: 'EMAIL_MODAL_IFRAME_RESIZE', height: h }, '*');
+                                  }
+                                } catch(err) {}
+                              }
+                              window.addEventListener('DOMContentLoaded', function() {
+                                window.scrollTo(0, 0);
+                                sendH();
+                              });
+                              window.addEventListener('load', function() {
+                                window.scrollTo(0, 0);
+                                sendH();
+                              });
+                              if (window.ResizeObserver && document.body) {
+                                try {
+                                  var ro = new ResizeObserver(function() { sendH(); });
+                                  ro.observe(document.body);
+                                  if (document.documentElement) ro.observe(document.documentElement);
+                                } catch(e) {}
+                              }
+                              var imgs = document.querySelectorAll('img');
+                              for (var i = 0; i < imgs.length; i++) {
+                                imgs[i].addEventListener('load', sendH);
+                                imgs[i].addEventListener('error', sendH);
+                              }
+                              setTimeout(sendH, 50);
+                              setTimeout(sendH, 200);
+                              setTimeout(sendH, 600);
+                              setTimeout(sendH, 1500);
+                            </script>
                           </body>
                         </html>
                       `}
-                      className="w-full min-h-[400px] h-[450px] border-0"
-                      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+                      className="w-full border-0 block bg-white"
+                      style={{
+                        height: `${iframeHeight}px`,
+                        minHeight: '250px',
+                        overflow: 'hidden',
+                        display: 'block',
+                        backgroundColor: '#ffffff',
+                      }}
+                      scrolling="no"
+                      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin"
                     />
                   ) : (
                     <div className="p-8 text-center text-slate-500 dark:text-zinc-400 text-sm">

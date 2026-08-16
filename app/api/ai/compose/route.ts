@@ -139,7 +139,7 @@ Provide a clean Subject line and the Email Body.`;
 
       let finalSubject = subject;
       if (!finalSubject) {
-        if (originalEmail?.subject) {
+        if (originalEmail && originalEmail.subject) {
           finalSubject = originalEmail.subject.startsWith('Re:')
             ? originalEmail.subject
             : `Re: ${originalEmail.subject}`;

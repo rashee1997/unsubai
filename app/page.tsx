@@ -819,7 +819,9 @@ export default function Home() {
   const totalUnreadEmails = senders.reduce((acc, s) => acc + s.unreadCount, 0);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0A0A0B] text-slate-900 dark:text-zinc-100 font-sans transition-colors duration-200">
+    <div className={`flex flex-col bg-slate-50 dark:bg-[#0A0A0B] text-slate-900 dark:text-zinc-100 font-sans transition-colors duration-200 ${
+      activeView === 'mail' ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'
+    }`}>
       {/* Navbar */}
       <Navbar
         userEmail={userEmail}
@@ -833,11 +835,13 @@ export default function Home() {
       />
 
       {activeView === 'mail' ? (
-        <EmailClientView
-          token={accessToken}
-          onConnectGmail={handleConnect}
-          onOpenUnsubscribeCenter={() => setActiveView('unsub')}
-        />
+        <div className="flex-1 min-h-0 w-full h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
+          <EmailClientView
+            token={accessToken}
+            onConnectGmail={handleConnect}
+            onOpenUnsubscribeCenter={() => setActiveView('unsub')}
+          />
+        </div>
       ) : (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Banner if not connected */}

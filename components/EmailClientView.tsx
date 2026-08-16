@@ -29,6 +29,15 @@ import {
   Folder,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Bookmark,
+  FileText,
+  AlertOctagon,
+  Bell,
+  Users,
+  MessageSquare,
+  Newspaper,
+  Briefcase,
 } from 'lucide-react';
 import { ComposeModal } from '@/components/ComposeModal';
 import { EmailPreviewModal } from '@/components/EmailPreviewModal';
@@ -78,6 +87,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
   const [fullMessageContent, setFullMessageContent] = useState<string | null>(null);
   const [emailPreviewData, setEmailPreviewData] = useState<EmailPreviewResponse | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [readingViewMode, setReadingViewMode] = useState<'html' | 'text' | 'headers'>('html');
 
   // AI Summary state for currently open message
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -87,12 +97,14 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
   const [quickReplyText, setQuickReplyText] = useState('');
   const [isQuickReplying, setIsQuickReplying] = useState(false);
   const [isAiDraftingReply, setIsAiDraftingReply] = useState(false);
+  const [isReplyExpanded, setIsReplyExpanded] = useState(false);
 
   const handleSelectMessage = React.useCallback(async (msg: EmailMessageSummary) => {
     setSelectedMessage(msg);
     setAiSummary(null);
     setQuickReplyText('');
     setEmailPreviewData(null);
+    setIsReplyExpanded(false);
 
     // Mark read locally
     if (msg.isUnread) {
@@ -352,6 +364,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
   // Anti-AI Quick Reply Generation
   const handleGenerateAiReply = async (tone: 'direct' | 'warm' | 'casual' | 'polite_decline') => {
     if (!selectedMessage) return;
+    setIsReplyExpanded(true);
     setIsAiDraftingReply(true);
 
     try {
@@ -495,14 +508,14 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-slate-100 dark:bg-[#070709] relative">
+    <div className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-[#070709] relative">
       
       {/* Mobile Folder Drawer Backdrop & Sheet */}
       {isMobileFolderOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm lg:hidden flex">
           <div className="w-72 max-w-[80vw] bg-white dark:bg-[#0c0c0e] h-full flex flex-col justify-between p-4 shadow-2xl">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3">
+            <div className="flex flex-col gap-4 flex-1 min-h-0">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3 shrink-0">
                 <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center space-x-2">
                   <Folder className="w-4 h-4 text-indigo-500" />
                   <span>Mailboxes</span>
@@ -524,14 +537,14 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
                   setComposeInitialData({});
                   setIsComposeOpen(true);
                 }}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-2 shadow-md"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-2 shadow-md shrink-0"
               >
                 <PenSquare className="w-4 h-4" />
                 <span>Compose Email</span>
               </button>
 
               {/* Folder list */}
-              <div className="flex flex-col space-y-1">
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col space-y-1 overscroll-contain scrollbar-thin pr-1">
                 {[
                   { id: 'INBOX', label: 'Inbox', icon: Inbox, count: messages.filter((m) => m.isUnread).length },
                   { id: 'STARRED', label: 'Starred', icon: Star },
@@ -575,7 +588,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
                 setIsMobileFolderOpen(false);
                 onOpenUnsubscribeCenter();
               }}
-              className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40"
+              className="mt-4 shrink-0 flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40"
             >
               <ShieldCheck className="w-4 h-4 text-rose-500" />
               <span>Unsubscribe Center</span>
@@ -585,13 +598,13 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
         </div>
       )}
 
-      {/* 3-Pane Adaptive Frame */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 3-Pane Adaptive Frame - Independent dynamic scrolling for each column */}
+      <div className="flex-1 min-h-0 w-full h-full flex overflow-hidden">
         
-        {/* PANE 1: Desktop Navigation & Folders */}
-        <aside className="hidden lg:flex lg:w-52 xl:w-60 shrink-0 bg-white/80 dark:bg-[#0c0c0e]/90 border-r border-slate-200/80 dark:border-white/10 flex-col justify-between p-3 select-none">
-          <div className="flex flex-col gap-4">
-            {/* Primary Compose Button */}
+        {/* PANE 1: Desktop Navigation & Folders (Independent dynamic scroll) */}
+        <aside className="hidden lg:flex lg:w-52 xl:w-60 shrink-0 h-full bg-white/80 dark:bg-[#0c0c0e]/90 border-r border-slate-200/80 dark:border-white/10 flex-col overflow-hidden select-none">
+          {/* Primary Compose Button */}
+          <div className="p-3 pb-2 shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -603,42 +616,108 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
               <PenSquare className="w-4 h-4" />
               <span>Compose Email</span>
             </button>
+          </div>
 
-            {/* Main Mailboxes */}
-            <div className="flex flex-col space-y-0.5">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-400 dark:text-zinc-500 uppercase px-3 mb-1">
-                Mailboxes
+          {/* Main Mailboxes scrollable list */}
+          <div className="flex-1 min-h-0 column-scroll px-3 py-2 space-y-1">
+            <span className="text-[10px] font-bold tracking-wider text-slate-400 dark:text-zinc-500 uppercase px-3 mb-1 block">
+              Mailboxes
+            </span>
+
+            {[
+              { id: 'INBOX', label: 'Inbox', icon: Inbox, count: messages.filter((m) => m.isUnread).length },
+              { id: 'STARRED', label: 'Starred', icon: Star },
+              { id: 'SNOOZED', label: 'Snoozed', icon: Clock },
+              { id: 'IMPORTANT', label: 'Important', icon: Bookmark },
+              { id: 'SENT', label: 'Sent', icon: Send },
+              { id: 'DRAFTS', label: 'Drafts', icon: FileText },
+              { id: 'ALL_MAIL', label: 'All Mail', icon: Mail },
+              { id: 'UNREAD', label: 'Unread Only', icon: MailOpen },
+              { id: 'TRASH', label: 'Trash', icon: Trash2 },
+              { id: 'SPAM', label: 'Spam', icon: AlertOctagon },
+            ].map((folder) => {
+              const Icon = folder.icon;
+              const isActive = currentFolder === folder.id;
+              return (
+                <button
+                  key={folder.id}
+                  onClick={() => setCurrentFolder(folder.id)}
+                  className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    isActive
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold shadow-2xs'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800/50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                    <span className="truncate">{folder.label}</span>
+                  </div>
+                  {typeof folder.count === 'number' && folder.count > 0 && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-600 text-white shrink-0 ml-1">
+                      {folder.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Categories Section */}
+            <div className="pt-3">
+              <span className="text-[10px] font-bold tracking-wider text-slate-400 dark:text-zinc-500 uppercase px-3 mb-1 block">
+                Categories
               </span>
-
               {[
-                { id: 'INBOX', label: 'Inbox', icon: Inbox, count: messages.filter((m) => m.isUnread).length },
-                { id: 'STARRED', label: 'Starred', icon: Star },
-                { id: 'UNREAD', label: 'Unread Only', icon: Mail },
-                { id: 'PROMOTIONS', label: 'Promotions', icon: Tag },
-                { id: 'SENT', label: 'Sent', icon: Send },
-                { id: 'TRASH', label: 'Trash', icon: Trash2 },
-              ].map((folder) => {
-                const Icon = folder.icon;
-                const isActive = currentFolder === folder.id;
+                { id: 'PROMOTIONS', label: 'Promotions', icon: Tag, color: 'text-amber-500' },
+                { id: 'UPDATES', label: 'Updates', icon: Bell, color: 'text-blue-500' },
+                { id: 'SOCIAL', label: 'Social', icon: Users, color: 'text-purple-500' },
+                { id: 'FORUMS', label: 'Forums', icon: MessageSquare, color: 'text-emerald-500' },
+              ].map((cat) => {
+                const Icon = cat.icon;
+                const isActive = currentFolder === cat.id;
                 return (
                   <button
-                    key={folder.id}
-                    onClick={() => setCurrentFolder(folder.id)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    key={cat.id}
+                    onClick={() => setCurrentFolder(cat.id)}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       isActive
-                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold shadow-2xs'
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800/50'
                     }`}
                   >
-                    <div className="flex items-center space-x-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-                      <span>{folder.label}</span>
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : cat.color}`} />
+                      <span className="truncate">{cat.label}</span>
                     </div>
-                    {typeof folder.count === 'number' && folder.count > 0 && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-600 text-white">
-                        {folder.count}
-                      </span>
-                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Smart Labels Section */}
+            <div className="pt-3">
+              <span className="text-[10px] font-bold tracking-wider text-slate-400 dark:text-zinc-500 uppercase px-3 mb-1 block">
+                Smart Views
+              </span>
+              {[
+                { id: 'NEWSLETTERS', label: 'Newsletters', icon: Newspaper, color: 'text-rose-500' },
+                { id: 'JOB_ALERTS', label: 'Job Alerts', icon: Briefcase, color: 'text-indigo-500' },
+              ].map((lbl) => {
+                const Icon = lbl.icon;
+                const isActive = currentFolder === lbl.id;
+                return (
+                  <button
+                    key={lbl.id}
+                    onClick={() => setCurrentFolder(lbl.id)}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold shadow-2xs'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : lbl.color}`} />
+                      <span className="truncate">{lbl.label}</span>
+                    </div>
                   </button>
                 );
               })}
@@ -646,7 +725,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
           </div>
 
           {/* Dedicated Tools section */}
-          <div className="pt-3 border-t border-slate-200/80 dark:border-white/10 flex flex-col gap-2">
+          <div className="p-3 pt-2 border-t border-slate-200/80 dark:border-white/10 flex flex-col gap-2 shrink-0">
             <span className="text-[10px] font-semibold tracking-wider text-slate-400 dark:text-zinc-500 uppercase px-3">
               Power Tools
             </span>
@@ -660,14 +739,14 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
           </div>
         </aside>
 
-        {/* PANE 2: Message Stream List (Fluid & Adaptive for Mobile/Tablet) */}
+        {/* PANE 2: Message Stream List (Independent dynamic scroll) */}
         <section
-          className={`bg-white dark:bg-[#09090b] border-r border-slate-200/80 dark:border-white/10 flex flex-col ${
+          className={`bg-white dark:bg-[#09090b] border-r border-slate-200/80 dark:border-white/10 flex flex-col h-full overflow-hidden min-h-0 ${
             selectedMessage ? 'hidden md:flex md:w-72 lg:w-80 xl:w-96 shrink-0' : 'w-full md:w-72 lg:w-80 xl:w-96 shrink-0'
           }`}
         >
           {/* Stream Search Bar & Mobile Folder Toggle */}
-          <div className="p-2.5 sm:p-3 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+          <div className="p-2.5 sm:p-3 border-b border-slate-100 dark:border-white/5 flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsMobileFolderOpen(true)}
@@ -699,7 +778,7 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
           </div>
 
           {/* Quick Folder Horizontal Scroll Pills on Mobile/Tablet (< lg) */}
-          <div className="lg:hidden px-3 py-2 bg-slate-50/80 dark:bg-zinc-900/40 border-b border-slate-200/60 dark:border-white/5 flex items-center space-x-1.5 overflow-x-auto scrollbar-none text-xs">
+          <div className="lg:hidden px-3 py-2 bg-slate-50/80 dark:bg-zinc-900/40 border-b border-slate-200/60 dark:border-white/5 flex items-center space-x-1.5 overflow-x-auto scrollbar-none text-xs shrink-0">
             {['INBOX', 'STARRED', 'UNREAD', 'PROMOTIONS', 'SENT'].map((f) => (
               <button
                 key={f}
@@ -715,8 +794,8 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
             ))}
           </div>
 
-          {/* Email Items List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5">
+          {/* Email Items List - Scrollable independently */}
+          <div className="flex-1 min-h-0 column-scroll divide-y divide-slate-100 dark:divide-white/5">
             {messages.length === 0 ? (
               <div className="p-8 text-center flex flex-col items-center justify-center text-slate-400 dark:text-zinc-500">
                 <Inbox className="w-8 h-8 mb-2 stroke-1" />
@@ -829,34 +908,33 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
           </div>
         </section>
 
-        {/* PANE 3: Reading, AI Copilot, & Action Canvas (Strictly Bounded Height) */}
+        {/* PANE 3: Reading, AI Actions, & Minimalist Composer */}
         <main
-          className={`flex-1 bg-white dark:bg-[#070709] flex flex-col h-full max-h-full overflow-hidden min-h-0 min-w-0 ${
+          className={`flex-1 min-w-0 bg-white dark:bg-[#09090b] flex flex-col h-full max-h-full overflow-hidden min-h-0 ${
             selectedMessage ? 'flex w-full min-w-0' : 'hidden md:flex min-w-0'
           }`}
         >
           {selectedMessage ? (
             <div className="flex-1 flex flex-col h-full max-h-full overflow-hidden min-h-0">
-              
-              {/* Reading Header Bar with Mobile Back Button */}
-              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200/80 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 bg-white/70 dark:bg-[#09090b]/80 backdrop-blur-md shrink-0">
-                <div className="flex items-center space-x-2 min-w-0 flex-1">
+              {/* Clean Minimalist Reading Header */}
+              <div className="px-5 py-3.5 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-md shrink-0">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
                   {/* Mobile Back Button */}
                   <button
                     type="button"
                     onClick={() => setSelectedMessage(null)}
-                    className="md:hidden p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 shrink-0"
-                    title="Back to inbox list"
+                    className="md:hidden p-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 shrink-0 cursor-pointer"
+                    title="Back to inbox"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
 
-                  <div className="flex flex-col min-w-0 pr-2">
-                    <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                      {selectedMessage.subject}
+                  <div className="flex flex-col min-w-0">
+                    <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate tracking-tight">
+                      {selectedMessage.subject || '(No Subject)'}
                     </h1>
-                    <div className="flex items-center space-x-2 mt-0.5 text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 truncate">
-                      <span className="font-medium text-slate-700 dark:text-zinc-300 truncate">
+                    <div className="flex items-center space-x-2 mt-0.5 text-xs text-slate-500 dark:text-zinc-400 truncate">
+                      <span className="font-semibold text-slate-800 dark:text-zinc-200 truncate">
                         {selectedMessage.from}
                       </span>
                       <span>•</span>
@@ -865,142 +943,263 @@ export const EmailClientView: React.FC<EmailClientViewProps> = ({
                   </div>
                 </div>
 
-                {/* Quick actions */}
-                <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                {/* Clean Actions on Right */}
+                <div className="flex items-center space-x-1.5 shrink-0">
+                  {/* 1-Click Unsubscribe button */}
                   {selectedMessage.unsubscribeHeader?.hasHeader && (
                     <button
                       onClick={handle1ClickUnsubscribe}
-                      className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold border border-rose-200/80 dark:border-rose-900/40 flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-semibold border border-rose-200/80 dark:border-rose-900/40 flex items-center space-x-1.5 cursor-pointer shadow-2xs transition-all"
+                      title="1-Click List-Unsubscribe"
                     >
                       <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                      <span className="hidden sm:inline">1-Click Unsubscribe</span>
-                      <span className="sm:hidden">Unsub</span>
+                      <span className="hidden sm:inline">Unsubscribe</span>
                     </button>
                   )}
 
+                  {/* AI Summary Button */}
+                  <button
+                    onClick={handleSummarizeThread}
+                    disabled={isSummarizing}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                      aiSummary
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-zinc-800'
+                    }`}
+                    title="AI 2-bullet summary"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="hidden sm:inline">{isSummarizing ? 'Summarizing...' : 'Summary'}</span>
+                  </button>
+
+                  <div className="h-4 w-px bg-slate-200 dark:bg-zinc-800 mx-1 hidden sm:block" />
+
+                  {/* Mode toggle (Rich / Text / Headers) */}
+                  <div className="hidden sm:flex items-center bg-slate-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-slate-200/60 dark:border-zinc-700/60">
+                    <button
+                      onClick={() => setReadingViewMode('html')}
+                      className={`px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
+                        readingViewMode === 'html'
+                          ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200'
+                      }`}
+                      title="Rendered HTML"
+                    >
+                      HTML
+                    </button>
+                    <button
+                      onClick={() => setReadingViewMode('text')}
+                      className={`px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
+                        readingViewMode === 'text'
+                          ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200'
+                      }`}
+                      title="Plain Text"
+                    >
+                      Text
+                    </button>
+                    <button
+                      onClick={() => setReadingViewMode('headers')}
+                      className={`px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
+                        readingViewMode === 'headers'
+                          ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200'
+                      }`}
+                      title="Headers & Security"
+                    >
+                      Headers
+                    </button>
+                  </div>
+
+                  {/* Star */}
+                  <button
+                    onClick={(e) => handleToggleStar(e, selectedMessage.id)}
+                    title={selectedMessage.isStarred ? 'Unstar' : 'Star'}
+                    className="p-2 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                  >
+                    <Star
+                      className={`w-4 h-4 ${
+                        selectedMessage.isStarred ? 'fill-amber-400 text-amber-400' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Archive */}
                   <button
                     onClick={() => handleArchive(selectedMessage.id)}
                     title="Archive"
-                    className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   >
                     <Archive className="w-4 h-4" />
                   </button>
 
+                  {/* Trash */}
                   <button
                     onClick={() => handleTrash(selectedMessage.id)}
                     title="Move to Trash"
-                    className="p-2 rounded-lg text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                    className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* AI Copilot & Summary strip */}
-              <div className="px-4 sm:px-6 py-2 bg-slate-50/80 dark:bg-zinc-900/30 border-b border-slate-200/60 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center space-x-1">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>AI Copilot:</span>
-                  </span>
-                  <button
-                    onClick={handleSummarizeThread}
-                    disabled={isSummarizing}
-                    className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    {isSummarizing ? 'Analyzing...' : 'Summarize Thread'}
-                  </button>
-                </div>
-
-                {/* Anti-AI Instant Reply Triggers */}
-                <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none py-0.5">
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-500 shrink-0 mr-1 hidden sm:inline">Tone:</span>
-                  {(['direct', 'warm', 'casual', 'polite_decline'] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => handleGenerateAiReply(t)}
-                      disabled={isAiDraftingReply}
-                      className="px-2 py-0.5 rounded bg-white dark:bg-zinc-800 text-[10px] sm:text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-zinc-700 shadow-2xs cursor-pointer whitespace-nowrap"
-                    >
-                      {t === 'direct' ? 'Direct' : t === 'warm' ? 'Warm' : t === 'casual' ? 'Casual' : 'Decline'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* AI Summary Banner (if active) */}
               {aiSummary && (
-                <div className="px-4 sm:px-6 py-3 bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-900 dark:text-indigo-200 flex items-start space-x-2">
-                  <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                  <div className="whitespace-pre-line leading-relaxed font-sans">{aiSummary}</div>
+                <div className="px-5 py-3 bg-indigo-50/80 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-950 dark:text-indigo-200 flex items-start justify-between gap-3 shrink-0">
+                  <div className="flex items-start space-x-2.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="whitespace-pre-line leading-relaxed font-sans font-medium">{aiSummary}</div>
+                  </div>
+                  <button
+                    onClick={() => setAiSummary(null)}
+                    className="p-1 rounded-md text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/50 cursor-pointer shrink-0"
+                    title="Dismiss Summary"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
 
-              {/* Email Content Body Pane with Sandboxed Rich HTML Preview */}
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              {/* Email Content Body Pane with Full Flow Reading */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent">
                 <SafeEmailPreview
                   emailData={emailPreviewData}
                   rawSnippet={selectedMessage.snippet}
                   isLoading={isLoadingContent}
+                  viewMode={readingViewMode}
                 />
               </div>
 
-              {/* Inline Quick Reply Box */}
-              <div className="p-3 sm:p-4 border-t border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-[#0a0a0c] shrink-0 flex flex-col gap-2">
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                  <div className="flex items-center space-x-1.5 truncate">
-                    <Reply className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Quick Reply to {selectedMessage.from.split('<')[0].trim()}</span>
+              {/* Sleek Collapsible Bottom Reply Bar */}
+              <div className="border-t border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#0a0a0c] shrink-0 transition-all">
+                {!isReplyExpanded ? (
+                  /* Collapsed Minimalist Trigger Bar */
+                  <div className="px-5 py-3 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => setIsReplyExpanded(true)}
+                      className="flex-1 px-4 py-2 rounded-xl bg-slate-100/80 dark:bg-zinc-900 hover:bg-slate-200/70 dark:hover:bg-zinc-800 border border-slate-200/60 dark:border-white/5 text-xs text-slate-500 dark:text-zinc-400 flex items-center space-x-2 cursor-pointer transition-colors text-left"
+                    >
+                      <Reply className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">Reply to {selectedMessage.from.split('<')[0].trim()}...</span>
+                    </button>
+
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          setIsReplyExpanded(true);
+                          handleGenerateAiReply('direct');
+                        }}
+                        disabled={isAiDraftingReply}
+                        className="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center space-x-1.5 border border-indigo-200/60 dark:border-indigo-900/40 cursor-pointer transition-all"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">AI Draft</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setComposeInitialData({
+                            to: selectedMessage.from,
+                            subject: selectedMessage.subject.startsWith('Re:')
+                              ? selectedMessage.subject
+                              : `Re: ${selectedMessage.subject}`,
+                            body: '',
+                            threadId: selectedMessage.threadId,
+                          });
+                          setIsComposeOpen(true);
+                        }}
+                        className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Open in full composer"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setComposeInitialData({
-                        to: selectedMessage.from,
-                        subject: selectedMessage.subject.startsWith('Re:')
-                          ? selectedMessage.subject
-                          : `Re: ${selectedMessage.subject}`,
-                        body: quickReplyText,
-                        threadId: selectedMessage.threadId,
-                      });
-                      setIsComposeOpen(true);
-                    }}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer shrink-0 ml-2"
-                  >
-                    Full Composer
-                  </button>
-                </div>
+                ) : (
+                  /* Expanded Clean Reply Composer */
+                  <div className="p-4 sm:p-5 flex flex-col gap-3">
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                      <div className="flex items-center space-x-1.5 font-medium truncate">
+                        <Reply className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span className="truncate">Replying to {selectedMessage.from.split('<')[0].trim()}</span>
+                      </div>
 
-                <div className="flex items-end gap-2">
-                  <textarea
-                    value={quickReplyText}
-                    onChange={(e) => setQuickReplyText(e.target.value)}
-                    placeholder="Type a human reply..."
-                    rows={2}
-                    className="flex-1 p-2 sm:p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSendQuickReply}
-                    disabled={isQuickReplying || !quickReplyText.trim()}
-                    className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all cursor-pointer shrink-0"
-                  >
-                    {isQuickReplying ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                    <span>Send</span>
-                  </button>
-                </div>
+                      {/* AI Tone Pills in context */}
+                      <div className="flex items-center space-x-1 overflow-x-auto scrollbar-none py-0.5">
+                        <span className="text-[10px] text-slate-400 mr-1 hidden sm:inline">AI Tone:</span>
+                        {(['direct', 'warm', 'casual', 'polite_decline'] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => handleGenerateAiReply(t)}
+                            disabled={isAiDraftingReply}
+                            className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-[11px] font-medium text-slate-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 border border-slate-200/60 dark:border-zinc-700 shadow-2xs cursor-pointer transition-all"
+                          >
+                            {t === 'direct' ? 'Direct' : t === 'warm' ? 'Warm' : t === 'casual' ? 'Casual' : 'Decline'}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => {
+                            setComposeInitialData({
+                              to: selectedMessage.from,
+                              subject: selectedMessage.subject.startsWith('Re:')
+                                ? selectedMessage.subject
+                                : `Re: ${selectedMessage.subject}`,
+                              body: quickReplyText,
+                              threadId: selectedMessage.threadId,
+                            });
+                            setIsComposeOpen(true);
+                          }}
+                          className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium ml-2 cursor-pointer hidden md:inline shrink-0"
+                        >
+                          Full Composer
+                        </button>
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={quickReplyText}
+                      onChange={(e) => setQuickReplyText(e.target.value)}
+                      placeholder="Type your response or pick an AI tone above..."
+                      rows={3}
+                      autoFocus
+                      className="w-full p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700/80 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none leading-relaxed transition-all"
+                    />
+
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsReplyExpanded(false)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSendQuickReply}
+                        disabled={isQuickReplying || !quickReplyText.trim()}
+                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-40 transition-all cursor-pointer"
+                      >
+                        {isQuickReplying ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        <span>Send Reply</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-zinc-500">
-              <MailOpen className="w-12 h-12 mb-3 stroke-1" />
+              <MailOpen className="w-12 h-12 mb-3 stroke-1 text-slate-300 dark:text-zinc-600" />
               <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-300">No message selected</h3>
               <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1 max-w-sm">
-                Select an email from the stream to read, generate human-cadence replies, or 1-click unsubscribe.
+                Select an email from the list to read with smooth full-height flow, generate quick replies, or 1-click unsubscribe.
               </p>
             </div>
           )}

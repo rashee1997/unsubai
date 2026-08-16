@@ -247,13 +247,20 @@ export async function POST(req: NextRequest) {
       try {
         let gmailQuery = '';
         if (folder === 'STARRED') gmailQuery = 'is:starred';
+        else if (folder === 'SNOOZED') gmailQuery = 'is:snoozed';
+        else if (folder === 'IMPORTANT') gmailQuery = 'is:important in:inbox';
         else if (folder === 'SENT') gmailQuery = 'in:sent';
         else if (folder === 'DRAFTS') gmailQuery = 'in:draft';
         else if (folder === 'TRASH') gmailQuery = 'in:trash';
         else if (folder === 'SPAM') gmailQuery = 'in:spam';
+        else if (folder === 'ALL_MAIL') gmailQuery = '';
         else if (folder === 'UNREAD') gmailQuery = 'is:unread in:inbox';
         else if (folder === 'PROMOTIONS') gmailQuery = 'category:promotions';
         else if (folder === 'UPDATES') gmailQuery = 'category:updates';
+        else if (folder === 'SOCIAL') gmailQuery = 'category:social';
+        else if (folder === 'FORUMS') gmailQuery = 'category:forums';
+        else if (folder === 'NEWSLETTERS') gmailQuery = 'list:* OR unsubscribe in:inbox';
+        else if (folder === 'JOB_ALERTS') gmailQuery = '("job" OR "career" OR "application" OR "interview" OR "recruiter" OR "hiring") in:inbox';
         else gmailQuery = 'in:inbox';
 
         if (q.trim()) {
